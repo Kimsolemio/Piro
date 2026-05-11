@@ -320,7 +320,23 @@
             isSummarizing = true;
             document.getElementById('interimSummaryLoader').classList.remove('hidden');
             
-            const prompt = `당신은 핵심 요약 속기사입니다. [제목: ${titleInput.value || '미정'}]의 대화 내용 중 일부입니다. 짧은 불렛포인트로 핵심만 요약하세요.`;
+            const prompt = `
+[System]
+당신은 AI 회의/강의 요약 전문가입니다. 제공된 텍스트는 STT(음성 인식)로 변환된 녹취록의 일부입니다.
+
+[Task]
+다음 텍스트의 핵심 내용을 구조화된 불렛포인트로 요약하세요.
+
+[Rules]
+1. '어', '그', '음' 같은 의미 없는 추임새나 중복되는 말은 제거하세요.
+2. STT 오탈자가 문맥상 명확하다면 올바른 단어로 유추하여 요약하세요.
+3. 각 불렛포인트는 명사형 종결이나 간결한 평어체(~함, ~임)로 작성하세요.
+4. 문맥이 잘려서 불완전한 내용이 있다면, 상상해서 채워 넣지 말고(거짓말 금지) 있는 팩트만 요약하세요.
+
+[Input]
+- 제목: ${titleInput.value || '미정'}
+- 내용: ${chunk}
+`;
             const result = await callGeminiAPI(prompt, chunk);
             
             if (result) {
@@ -346,7 +362,40 @@
             }
             updateStatus('최종 분석 중...', 'processing');
             
-            const prompt = `전체 녹취록을 바탕으로 [제목: ${titleInput.value || '미정'}]에 대한 전문적인 강의/회의 노트를 마크다운으로 작성하세요.\n[지침] 개요, 주요 논의사항(본문), 향후 과제(액션 아이템)를 포함하여 비즈니스 문서 수준으로 정리하세요.\n[가이드]: ${contextInput.value}`;
+            const prompt = `[System]
+당신은 최고 수준의 비즈니스 분석가이자 교육 콘텐츠 에디터입니다. 녹취록 데이터를 바탕으로 완벽한 형태의 최종 마크다운 문서를 작성해야 합니다.
+
+[Task]
+제공된 전체 녹취록과 가이드라인을 바탕으로 [제목: ${titleInput.value || '미정'}]에 대한 전문적인 노트를 작성하세요.
+
+[Rules]
+1. 사용자가 제공한 [가이드]를 최우선으로 반영하여 문서의 초점을 맞추세요.
+2. 원본에 없는 내용을 절대 지어내지 마세요. 사실 확인이 불가능한 내용은 배제합니다.
+3. 아래의 [Output Format]을 반드시 준수하여 마크다운으로 출력하세요.
+
+[Output Format]
+# 📝 ${titleInput.value || '미정'}
+> **한 줄 요약:** (전체 내용을 관통하는 1~2줄의 핵심 요약)
+
+## 1. 📌 개요 (Overview)
+- **배경 및 목적:** 
+- **핵심 주제:** 
+
+## 2. 💡 주요 내용 (Main Points)
+- **(핵심 키워드/소주제 1)**
+  - (상세 내용 1)
+  - (상세 내용 2)
+- **(핵심 키워드/소주제 2)**
+  - (상세 내용 1)
+  - (상세 내용 2)
+
+## 3. 🚀 향후 과제 (Action Items)
+- [ ] (구체적인 실행 과제나 다음 단계) (※ 언급된 경우에만 작성하고, 담당자나 기한이 있다면 포함할 것)
+
+[Input]
+- 가이드: ${contextInput.value}
+- 전체 녹취록: ${fullTranscript}
+`;
             
             const result = await callGeminiAPI(prompt, fullTranscript);
             
