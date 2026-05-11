@@ -334,6 +334,7 @@
 4. 문맥이 잘려서 불완전한 내용이 있다면, 상상해서 채워 넣지 말고(거짓말 금지) 있는 팩트만 요약하세요.
 
 [Input]
+- 제목: ${titleInput.value || '미정'}
 - 내용: ${chunk}
 `;
             const result = await callGeminiAPI(prompt, chunk);
@@ -373,14 +374,14 @@
 3. 아래의 [Output Format]을 반드시 준수하여 마크다운으로 출력하세요.
 
 [Output Format]
-#  ${titleInput.value || '미정'}
+# 📝 ${titleInput.value || '미정'}
 > **한 줄 요약:** (전체 내용을 관통하는 1~2줄의 핵심 요약)
 
-## 1.  개요 (Overview)
+## 1. 📌 개요 (Overview)
 - **배경 및 목적:** 
 - **핵심 주제:** 
 
-## 2.  주요 내용 (Main Points)
+## 2. 💡 주요 내용 (Main Points)
 - **(핵심 키워드/소주제 1)**
   - (상세 내용 1)
   - (상세 내용 2)
@@ -388,7 +389,7 @@
   - (상세 내용 1)
   - (상세 내용 2)
 
-## 3.  향후 과제 (Action Items)
+## 3. 🚀 향후 과제 (Action Items)
 - [ ] (구체적인 실행 과제나 다음 단계) (※ 언급된 경우에만 작성하고, 담당자나 기한이 있다면 포함할 것)
 
 [Input]
@@ -412,68 +413,51 @@
         // 음성 인식 로직 (브라우저 Web Speech API)
         // ----------------------------------------------------
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      let isAborted = false; 
-
-if (window.SpeechRecognition) {
-    recognition = new window.SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'ko-KR';
-
-    recognition.onstart = () => { 
-        isRecognizing = true; 
-        isAborted = false; // 시작 시 초기화
-    };
-
-    recognition.onresult = (event) => {
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
-        }
-        if (final) {
-            fullTranscript += final;
-            if (transcriptDiv.querySelector('p.italic')) transcriptDiv.innerHTML = '';
-            transcriptDiv.innerHTML += `<p class="mb-3 border-l-2 border-sky-500 pl-3">${final}</p>`;
-            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
-            document.getElementById('saveTranscriptTxtBtn').disabled = false;
-        }
-    };
-    
-    recognition.onerror = (e) => {
-        console.warn("Speech Recognition Error:", e.error);
         
-        // 치명적인 오류(권한 거부 등)일 경우 완전 종료
-        if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-            isAborted = true; // 재시작 방지
-            showError("마이크 권한이 거부되었거나 지원하지 않습니다.");
-            stopRecordingAndAnalyze();
-        } 
-        // no-speech(침묵)나 network 오류는 무시하고 onend에서 재시작되도록 유도
-        else if (e.error === 'no-speech' || e.error === 'network') {
-            // 별도 처리 없이 경고만 남김
-        }
-    };
+        if (window.SpeechRecognition) {
+            recognition = new window.SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'ko-KR';
 
-    recognition.onend = () => { 
-        isRecognizing = false;
-        
-        // 사용자가 명시적으로 중지하지 않았고, 치명적 에러가 아니라면 재시작
-        if (isRecording && !isAborted) {
-            // 브라우저 블락을 피하기 위해 약간의 딜레이를 줌 (300ms -> 1000ms로 늘려 안정성 확보)
-            setTimeout(() => {
-                if (isRecording && !isRecognizing) {
-                    try { 
-                        recognition.start(); 
-                    } catch(e) {
-                        console.error("재시작 실패:", e);
-                        // 이미 시작되었거나 상태가 꼬인 경우 완전 초기화 후 다시 시도
-                        recognition.stop();
-                    }
+            recognition.onstart = () => { 
+                isRecognizing = true; 
+            };
+
+            recognition.onresult = (event) => {
+                let final = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
                 }
-            }, 1000); 
+                if (final) {
+                    fullTranscript += final;
+                    if (transcriptDiv.querySelector('p.italic')) transcriptDiv.innerHTML = '';
+                    transcriptDiv.innerHTML += `<p class="mb-3 border-l-2 border-sky-500 pl-3">${final}</p>`;
+                    transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                    document.getElementById('saveTranscriptTxtBtn').disabled = false;
+                }
+            };
+            
+            recognition.onerror = (e) => {
+                console.warn("Speech Recognition Error:", e.error);
+                if(e.error === 'not-allowed') {
+                    showError("마이크 권한이 거부되었습니다. 주소창 자물쇠 아이콘을 눌러 권한을 허용해주세요.");
+                    stopRecordingAndAnalyze();
+                }
+            };
+
+            recognition.onend = () => { 
+                isRecognizing = false;
+                // 크롬 등에서 자동 중지될 경우 재시작 로직
+                if (isRecording) {
+                    setTimeout(() => {
+                        if (isRecording && !isRecognizing) {
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    }, 300);
+                }
+            };
         }
-    };
-}
 
         // ----------------------------------------------------
         // 버튼 이벤트 컨트롤
