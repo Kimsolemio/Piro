@@ -616,22 +616,21 @@ async function processInterimSummary() {
             a.click();
             URL.revokeObjectURL(url);
         });
-document.getElementById('saveInterimSummaryBtn').addEventListener('click', (e) => {
-    e.preventDefault();
-    if (summaryHistory.length === 0) return;
+
     
     // 15초 단위로 생성된 요약 히스토리를 하나의 마크다운 문서로 병합
-    const mdHeader = `# ${titleInput.value || '강의 실시간 요약'}\n> 본 문서는 AI가 실시간으로 분석한 정보 지득용 상세 요약본입니다.\n\n---\n\n`;
-    const mdContent = mdHeader + summaryHistory.join('\n\n---\n\n');
-    
-    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; 
-    a.download = `${titleInput.value || '실시간요약_상세'}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-});
+        document.getElementById('saveInterimSummaryBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            if (summaryHistory.length === 0) return;
+            const mdHeader = `# ${titleInput.value || '강의 실시간 요약'}\n> 본 문서는 AI가 실시간으로 분석한 정보 지득용 상세 요약본입니다.\n\n---\n\n`;
+            const mdContent = mdHeader + summaryHistory.join('\n\n---\n\n');
+            const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `${titleInput.value || '실시간요약_상세'}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
     </script>
 </body>
 </html>
