@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+    <!-- Firebase v9 compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
     <style>
         body {
@@ -99,15 +102,34 @@
                     <h3 class="text-lg font-semibold text-white flex items-center gap-2 mb-4">
                         <i data-lucide="hard-drive" class="h-5 w-5 text-slate-400"></i> 시스템 상태
                     </h3>
-                    <div class="flex-grow flex flex-col justify-center items-center text-center p-4 space-y-4 text-slate-400">
-                        <div class="p-4 bg-slate-800/50 rounded-full">
-                            <i data-lucide="wifi-off" class="h-8 w-8 text-slate-500"></i>
+                    <!-- Firebase 설정 입력 -->
+                    <div class="space-y-3 mb-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Project ID</label>
+                            <input type="text" id="fbProjectId" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-lg block w-full p-2" placeholder="your-project-id">
                         </div>
-                        <h4 class="font-medium text-slate-300">순수 로컬 모드</h4>
-                        <p class="text-xs leading-relaxed">
-                            모든 녹음 데이터와 요약본은 <b>외부 서버에 저장되지 않으며</b>, 페이지를 새로고침하거나 닫으면 삭제됩니다.<br><br>
-                            중요한 문서는 반드시 작업 완료 후 <b>TXT 또는 Word 파일로 다운로드</b>하여 보관해 주세요.
-                        </p>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">API Key</label>
+                            <input type="password" id="fbApiKey" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-lg block w-full p-2" placeholder="AIza...">
+                        </div>
+                        <button id="fbConnectBtn" class="w-full bg-sky-600/80 hover:bg-sky-600 text-white text-xs font-semibold py-2 rounded-lg transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="cloud" class="h-3.5 w-3.5"></i> Firebase 연결
+                        </button>
+                        <div id="fbStatus" class="text-center text-xs text-slate-500 flex items-center justify-center gap-1.5">
+                            <span id="fbDot" class="h-1.5 w-1.5 rounded-full bg-slate-600 inline-block"></span>
+                            <span id="fbStatusText">연결 안 됨</span>
+                        </div>
+                    </div>
+                    <div class="border-t border-slate-700/50 pt-3 flex-grow flex flex-col min-h-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-slate-400">저장된 노트</span>
+                            <button id="fbRefreshBtn" class="text-slate-500 hover:text-slate-300 transition-colors">
+                                <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+                            </button>
+                        </div>
+                        <div id="fbHistoryList" class="flex-grow overflow-y-auto custom-scrollbar space-y-2 text-xs text-slate-500 italic">
+                            Firebase 연결 후 불러옵니다.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -211,6 +233,139 @@
     <script>
         lucide.createIcons();
 
+        // ── Firebase 연결 ───────────────────────────────────────────────────
+        function updateFbStatus(connected, msg) {
+            document.getElementById('fbDot').className =
+                'h-1.5 w-1.5 rounded-full inline-block ' +
+                (connected ? 'bg-emerald-400' : 'bg-slate-600');
+            document.getElementById('fbStatusText').textContent = msg;
+        }
+
+        async function loadHistory() {
+            if (!fbDb) return;
+            const list = document.getElementById('fbHistoryList');
+            list.innerHTML = '<span class="text-slate-600">불러오는 중...</span>';
+            try {
+                const snap = await fbDb.collection('lectures')
+                    .orderBy('createdAt', 'desc').limit(20).get();
+                if (snap.empty) {
+                    list.innerHTML = '<span class="text-slate-600 italic">저장된 노트가 없습니다.</span>';
+                    return;
+                }
+                list.innerHTML = '';
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const item = document.createElement('div');
+                    item.className = 'bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/50 cursor-pointer hover:border-sky-500/40 transition-colors';
+                    const dt = d.createdAt?.toDate?.() ?? new Date();
+                    item.innerHTML = `
+                        <div class="font-semibold text-slate-300 truncate">${d.title || '(제목 없음)'}</div>
+                        <div class="text-slate-500 mt-0.5">${dt.toLocaleString('ko-KR')}</div>`;
+                    item.addEventListener('click', () => loadNoteIntoView(doc.id, d));
+                    list.appendChild(item);
+                });
+            } catch (e) {
+                list.innerHTML = '<span class="text-rose-400">불러오기 실패: ' + e.message + '</span>';
+            }
+        }
+
+        function loadNoteIntoView(id, data) {
+            currentDocId = id;
+            finalSummaryRawMarkdown = data.finalSummary || '';
+            fullTranscript = data.transcript || '';
+            titleInput.value = data.title || '';
+
+            if (fullTranscript) {
+                transcriptDiv.innerHTML = fullTranscript.split('\n')
+                    .filter(l => l.trim())
+                    .map(l => `<p class="mb-3 border-l-2 border-sky-500/50 pl-3 text-slate-400">${l}</p>`)
+                    .join('');
+            }
+            if (finalSummaryRawMarkdown) {
+                finalSummaryDiv.innerHTML = marked.parse(finalSummaryRawMarkdown);
+                document.getElementById('saveFinalSummaryDocBtn').disabled = false;
+            }
+            if (data.summaryHistory?.length) {
+                summaryHistory = data.summaryHistory;
+                interimSummaryDiv.innerHTML = '';
+                summaryHistory.forEach(s => {
+                    const block = document.createElement('div');
+                    block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs max-w-none';
+                    block.innerHTML = marked.parse(s);
+                    interimSummaryDiv.appendChild(block);
+                });
+                document.getElementById('saveInterimSummaryBtn').disabled = false;
+            }
+            showToast('노트를 불러왔습니다.', 'success');
+        }
+
+        async function saveToFirebase(isUpdate) {
+            if (!fbDb) return;
+            const payload = {
+                title: titleInput.value || '(제목 없음)',
+                transcript: fullTranscript,
+                summaryHistory: summaryHistory,
+                finalSummary: finalSummaryRawMarkdown,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            try {
+                if (isUpdate && currentDocId) {
+                    await fbDb.collection('lectures').doc(currentDocId).update(payload);
+                } else {
+                    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const ref = await fbDb.collection('lectures').add(payload);
+                    currentDocId = ref.id;
+                }
+                showToast('Firebase에 저장되었습니다.', 'success');
+                loadHistory();
+            } catch (e) {
+                showError('Firebase 저장 실패: ' + e.message);
+            }
+        }
+
+        document.getElementById('fbConnectBtn').addEventListener('click', () => {
+            const projectId = document.getElementById('fbProjectId').value.trim();
+            const apiKey    = document.getElementById('fbApiKey').value.trim();
+            if (!projectId || !apiKey) { showError('Project ID와 API Key를 모두 입력하세요.'); return; }
+
+            try {
+                if (fbApp) { firebase.app().delete(); fbApp = null; fbDb = null; }
+                fbApp = firebase.initializeApp({
+                    apiKey,
+                    projectId,
+                    authDomain: `${projectId}.firebaseapp.com`
+                });
+                fbDb = fbApp.firestore();
+                updateFbStatus(true, '연결됨 · ' + projectId);
+                lucide.createIcons();
+                loadHistory();
+            } catch (e) {
+                updateFbStatus(false, '연결 실패');
+                showError('Firebase 초기화 오류: ' + e.message);
+            }
+        });
+
+        document.getElementById('fbRefreshBtn').addEventListener('click', () => {
+            if (!fbDb) { showError('Firebase가 연결되지 않았습니다.'); return; }
+            loadHistory();
+        });
+
+        // 성공 토스트 (기존 에러 토스트 재사용 + 색상 전환)
+        function showToast(message, type) {
+            if (type === 'success') {
+                errorText.textContent = message;
+                errorToast.classList.remove('bg-rose-900/95', 'border-rose-500/30', 'translate-y-20', 'opacity-0', 'pointer-events-none');
+                errorToast.classList.add('bg-emerald-900/95', 'border-emerald-500/30');
+                setTimeout(() => {
+                    errorToast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+                    errorToast.classList.remove('bg-emerald-900/95', 'border-emerald-500/30');
+                    errorToast.classList.add('bg-rose-900/95', 'border-rose-500/30');
+                }, 3000);
+            } else {
+                showError(message);
+            }
+        }
+
         let isRecording = false;
         let isProcessing = false;
         let isRecognizing = false;
@@ -221,6 +376,11 @@
         let summaryInterval = null;
         let summaryHistory = [];
         let finalSummaryRawMarkdown = '';
+
+        // Firebase
+        let fbApp = null;
+        let fbDb  = null;
+        let currentDocId = null;
 
         const recordBtn = document.getElementById('recordBtn');
         const micIconContainer = document.getElementById('micIconContainer');
@@ -394,6 +554,8 @@
                 finalSummaryDiv.innerHTML = marked.parse(result);
                 document.getElementById('saveFinalSummaryDocBtn').disabled = false;
                 updateStatus('분석 완료', 'idle');
+                // 최종 노트 완성 시 Firebase 자동 저장
+                if (fbDb) saveToFirebase(!!currentDocId);
             } else {
                 updateStatus('분석 실패', 'idle');
             }
