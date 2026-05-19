@@ -3,21 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 강의록 요약 (V8.1.0 - Gemini 3.1 Flash-Lite)</title>
-    
-    <!-- Tailwind CSS -->
+    <title>AI 강의록 요약</title>
+
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-    
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Marked.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 
     <style>
         body {
@@ -30,25 +24,23 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-        
         .pulse-live { animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse-glow {
             0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
             50% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
         }
-        
         .glass-panel {
             background: rgba(15, 23, 42, 0.7);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(51, 65, 85, 0.6);
         }
-        
         .save-btn {
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 32px; height: 32px;
+            width: 32px;
+            height: 32px;
             background-color: #334155;
             color: #cbd5e1;
             border-radius: 9999px;
@@ -58,38 +50,50 @@
         .save-btn:hover:not(:disabled) { background-color: #475569; color: #ffffff; }
         .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .tooltip {
-            position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
-            background-color: #0f172a; color: #ffffff; padding: 4px 8px; border-radius: 4px;
-            font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none;
-            transition: 0.2s; border: 1px solid #334155; z-index: 10;
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #0f172a;
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.2s;
+            border: 1px solid #334155;
+            z-index: 10;
         }
         .group:hover .tooltip { opacity: 1; }
-
         .premium-border { position: relative; }
         .premium-border::before {
-            content: ""; position: absolute; inset: -1px; border-radius: inherit;
+            content: "";
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
             background: linear-gradient(to right, #3b82f6, #8b5cf6);
-            z-index: -1; opacity: 0.3;
+            z-index: -1;
+            opacity: 0.3;
         }
     </style>
 </head>
 <body class="text-slate-200 antialiased">
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
-        
         <header class="text-center mb-10 mt-6">
             <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent tracking-tight">
-                AI 강의록 요약 
+                AI 강의록 요약
                 <span class="inline-block text-sm md:text-lg font-bold text-slate-400 align-top ml-2 border border-slate-500/40 bg-slate-500/10 px-3 py-1 rounded-md mb-2 md:mb-0 shadow-[0_0_15px_rgba(148,163,184,0.2)]">
-                    V8.1 3.1 FLASH-LITE
+                    V8.1 FLASH-LITE
                 </span>
             </h1>
             <p class="text-slate-400 mt-4 max-w-2xl mx-auto leading-relaxed">
-                <b>최신 Gemini 3.1 Flash-Lite 모델 적용 완료.</b> 비용 효율성과 응답 품질이 극대화된 새로운 엔진으로 빠르고 정확한 요약을 경험해 보세요.
+                <b>빠르고 정확한 AI 강의록 요약 도구입니다.</b> 실시간 녹취, 중간 요약, 최종 노트까지 한 번에 정리할 수 있습니다.
             </p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-10">
-            <!-- Sidebar: Local Info (replaced History) -->
             <div class="lg:col-span-1 flex flex-col gap-4">
                 <div class="glass-panel rounded-2xl p-5 flex flex-col h-[650px] shadow-xl">
                     <h3 class="text-lg font-semibold text-white flex items-center gap-2 mb-4">
@@ -101,7 +105,6 @@
                         </div>
                         <h4 class="font-medium text-slate-300">순수 로컬 모드</h4>
                         <p class="text-xs leading-relaxed">
-                            클라우드 동기화가 비활성화되었습니다.<br><br>
                             모든 녹음 데이터와 요약본은 <b>외부 서버에 저장되지 않으며</b>, 페이지를 새로고침하거나 닫으면 삭제됩니다.<br><br>
                             중요한 문서는 반드시 작업 완료 후 <b>TXT 또는 Word 파일로 다운로드</b>하여 보관해 주세요.
                         </p>
@@ -109,19 +112,17 @@
                 </div>
             </div>
 
-            <!-- Main Content Area -->
             <div class="lg:col-span-3 space-y-6">
-                <!-- 설정 영역 -->
                 <div class="grid grid-cols-1 gap-4">
                     <div class="glass-panel p-5 rounded-xl shadow-lg premium-border">
                         <label for="apiKey" class="block text-sm font-medium text-slate-300 mb-2 flex justify-between items-center">
-                            <span class="flex items-center gap-2"><i data-lucide="key" class="h-4 w-4 text-amber-400"></i> Gemini API 키 (선택사항)</span>
+                            <span class="flex items-center gap-2"><i data-lucide="key" class="h-4 w-4 text-amber-400"></i> Gemini API 키</span>
                             <span class="text-[10px] bg-slate-500/10 text-slate-400 px-2 py-0.5 rounded border border-slate-500/20 flex items-center gap-1">
                                 <i data-lucide="server" class="h-3 w-3"></i> Local
                             </span>
                         </label>
                         <div class="relative">
-                            <input type="password" id="apiKey" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-2 focus:ring-sky-500 block w-full p-3 pr-10" placeholder="기본 키가 적용됩니다. 본인의 키가 있다면 입력하세요">
+                            <input type="password" id="apiKey" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-2 focus:ring-sky-500 block w-full p-3 pr-10" placeholder="Gemini API 키를 입력하세요">
                             <button type="button" id="toggleApiKey" class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white focus:outline-none">
                                 <span id="eyeIconWrapper"><i data-lucide="eye" class="h-5 w-5"></i></span>
                             </button>
@@ -140,12 +141,9 @@
                     </div>
                 </div>
 
-                <!-- 녹음 컨트롤 -->
                 <div class="flex flex-col items-center justify-center py-6">
                     <button type="button" id="recordBtn" class="bg-gradient-to-br from-sky-500 to-indigo-600 text-white font-bold h-24 w-24 rounded-full shadow-2xl hover:scale-105 transition-all flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-sky-500/50">
-                        <span id="micIconContainer">
-                            <i data-lucide="mic" class="h-10 w-10"></i>
-                        </span>
+                        <span id="micIconContainer"><i data-lucide="mic" class="h-10 w-10"></i></span>
                     </button>
                     <div id="status" class="mt-4 text-slate-400 flex items-center space-x-2 bg-slate-800/80 px-4 py-2 rounded-full border border-slate-700">
                         <div id="status-indicator" class="h-2 w-2 rounded-full bg-slate-500 transition-colors duration-500"></div>
@@ -153,7 +151,6 @@
                     </div>
                 </div>
 
-                <!-- 디스플레이 패널 -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="glass-panel rounded-2xl flex flex-col h-[400px] overflow-hidden">
                         <div class="p-4 border-b border-slate-700/50 bg-slate-900/40 flex justify-between items-center">
@@ -170,55 +167,53 @@
                         </div>
                     </div>
 
-<div class="p-4 border-b border-slate-700/50 bg-slate-900/40 flex justify-between items-center">
-    <h2 class="text-sm font-semibold text-white flex items-center gap-2">
-        <i data-lucide="sparkles" class="h-4 w-4 text-amber-400"></i> 실시간 요약
-    </h2>
-    <div class="flex items-center gap-2">
-        <div id="interimSummaryLoader" class="hidden"><i data-lucide="loader-circle" class="h-4 w-4 animate-spin text-amber-400"></i></div>
-        <button type="button" id="saveInterimSummaryBtn" disabled class="save-btn group">
-            <i data-lucide="download" class="h-3.5 w-3.5"></i>
-            <span class="tooltip">MD 저장</span>
-        </button>
-    </div>
-</div>
-                <!-- 최종 노트 -->
+                    <div class="glass-panel rounded-2xl flex flex-col h-[400px] overflow-hidden">
+                        <div class="p-4 border-b border-slate-700/50 bg-slate-900/40 flex justify-between items-center">
+                            <h2 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <i data-lucide="sparkles" class="h-4 w-4 text-amber-400"></i> 실시간 요약
+                            </h2>
+                            <div class="flex items-center gap-2">
+                                <div id="interimSummaryLoader" class="hidden"><i data-lucide="loader-circle" class="h-4 w-4 animate-spin text-amber-400"></i></div>
+                                <button type="button" id="saveInterimSummaryBtn" disabled class="save-btn group">
+                                    <i data-lucide="download" class="h-3.5 w-3.5"></i>
+                                    <span class="tooltip">MD 저장</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="interimSummary" class="p-5 overflow-y-auto custom-scrollbar flex-grow text-sm leading-relaxed text-slate-300">
+                            <p class="text-slate-600 italic">자동 요약 대기 중...</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="glass-panel rounded-2xl flex flex-col min-h-[400px] shadow-2xl border-t border-sky-500/20">
                     <div class="p-5 border-b border-slate-700/50 bg-slate-900/60 flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-white flex items-center gap-2">
                             <i data-lucide="book-open-check" class="h-5 w-5 text-purple-400"></i> 최종 정리 노트
                         </h2>
                         <button type="button" id="saveFinalSummaryDocBtn" disabled class="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                            <i data-lucide="file-word" class="h-4 w-4"></i> Word 다운로드
+                            <i data-lucide="file-text" class="h-4 w-4"></i> .docx 다운로드
                         </button>
                     </div>
                     <div id="finalSummary" class="p-8 prose prose-invert prose-slate max-w-none">
-                        <div class="text-center py-20 text-slate-600">
-                            녹음 종료 후 전체 내용을 분석하여 완벽한 노트가 생성됩니다.
-                        </div>
+                        <div class="text-center py-20 text-slate-600">녹음 종료 후 전체 내용을 분석하여 완벽한 노트가 생성됩니다.</div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- 에러 알림 -->
+
         <div id="error-message" class="fixed bottom-6 right-6 bg-rose-900/95 backdrop-blur-md text-white py-4 px-5 rounded-xl shadow-2xl z-50 flex items-start gap-3 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none border border-rose-500/30">
             <i data-lucide="alert-triangle" class="h-5 w-5 text-rose-300"></i>
             <span id="error-text" class="text-sm font-medium"></span>
         </div>
     </div>
 
-    <!-- 순수 Local Javascript (No Modules, No Firebase) -->
     <script>
-        // 초기 아이콘 렌더링
         lucide.createIcons();
 
-        // ----------------------------------------------------
-        // 전역 상태 변수
-        // ----------------------------------------------------
         let isRecording = false;
         let isProcessing = false;
-        let isRecognizing = false; 
+        let isRecognizing = false;
         let recognition = null;
         let fullTranscript = '';
         let lastProcessedLength = 0;
@@ -227,9 +222,8 @@
         let summaryHistory = [];
         let finalSummaryRawMarkdown = '';
 
-        // DOM Elements
         const recordBtn = document.getElementById('recordBtn');
-        const micIconContainer = document.getElementById('micIconContainer'); 
+        const micIconContainer = document.getElementById('micIconContainer');
         const statusText = document.getElementById('status-text');
         const statusIndicator = document.getElementById('status-indicator');
         const apiKeyInput = document.getElementById('apiKey');
@@ -241,37 +235,39 @@
         const errorToast = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
 
-        // 에러 알림 헬퍼 함수
         function showError(message) {
             errorText.textContent = message;
             errorToast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
-            setTimeout(() => errorToast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none'), 5000);
+            setTimeout(() => {
+                errorToast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 5000);
         }
 
-        // 상태 UI 업데이트 함수
         function updateStatus(text, state) {
             statusText.textContent = text;
-            statusIndicator.className = 'h-2 w-2 rounded-full ' + (state === 'recording' ? 'bg-rose-500 shadow-lg' : state === 'processing' ? 'bg-amber-400 animate-pulse' : 'bg-slate-500');
+            statusIndicator.className = 'h-2 w-2 rounded-full ' + (
+                state === 'recording' ? 'bg-rose-500 shadow-lg' :
+                state === 'processing' ? 'bg-amber-400 animate-pulse' :
+                'bg-slate-500'
+            );
         }
 
-        // ----------------------------------------------------
-        // AI 통신 로직 (Fetch API + 지수 백오프)
-        // ----------------------------------------------------
         async function callGeminiAPI(systemPrompt, userText) {
-            const systemApiKey = ""; 
-            const currentKey = apiKeyInput.value.trim() || systemApiKey;
-            
-            // Gemini 3.1 Flash-Lite 모델 적용
-            const model = "gemini-3.1-flash-lite-preview";
+            const currentKey = apiKeyInput.value.trim();
+            if (!currentKey) {
+                showError('API 키를 입력해주세요.');
+                return null;
+            }
+
+            const model = 'gemini-3.1-flash-lite-preview';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
-            
             const payload = {
                 systemInstruction: { parts: [{ text: systemPrompt }] },
                 contents: [{ parts: [{ text: userText }] }]
             };
 
             const delays = [1000, 2000, 4000, 8000, 16000];
-            let lastErrorMsg = "";
+            let lastErrorMsg = '';
 
             for (let i = 0; i <= delays.length; i++) {
                 try {
@@ -280,104 +276,78 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
-                    
+
                     if (!response.ok) {
                         let errMsg = `HTTP ${response.status}`;
                         try {
                             const errData = await response.json();
                             errMsg = errData.error?.message || errMsg;
-                        } catch(e) {}
-                        
+                        } catch (e) {}
                         throw new Error(`[${response.status}] ${errMsg}`);
                     }
-                    
+
                     const data = await response.json();
                     return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
                 } catch (error) {
                     lastErrorMsg = error.message;
-                    
-                    // 권한, 인증, 모델 없음 등 명백한 클라이언트 에러는 재시도하지 않음
-                    if (lastErrorMsg.includes("[400]") || lastErrorMsg.includes("[403]") || lastErrorMsg.includes("[404]")) {
-                        break;
-                    }
-
-                    if (i === delays.length) break; // 최대 재시도 횟수 도달
+                    if (lastErrorMsg.includes('[400]') || lastErrorMsg.includes('[403]') || lastErrorMsg.includes('[404]')) break;
+                    if (i === delays.length) break;
                     await new Promise(r => setTimeout(r, delays[i]));
                 }
             }
 
-            console.error("AI 통신 오류:", lastErrorMsg);
-            showError("AI 통신 오류: " + lastErrorMsg);
+            console.error('AI 통신 오류:', lastErrorMsg);
+            showError('AI 통신 오류: ' + lastErrorMsg);
             return null;
         }
 
-async function processInterimSummary() {
-    if (isSummarizing || !isRecording) return;
-    const chunk = fullTranscript.substring(lastProcessedLength).trim();
-    if (chunk.length < 15) return; // 텍스트가 짧으면 무시
+        async function processInterimSummary() {
+            if (isSummarizing || !isRecording) return;
 
-    isSummarizing = true;
-    document.getElementById('interimSummaryLoader').classList.remove('hidden');
-    
-    // 정보 지득(학습)에 최적화된 프롬프트로 고도화
-    const prompt = `
+            const chunk = fullTranscript.substring(lastProcessedLength).trim();
+            if (chunk.length < 15) return;
+
+            isSummarizing = true;
+            document.getElementById('interimSummaryLoader').classList.remove('hidden');
+
+            const prompt = `
 [System]
-당신은 AI 회의/강의 요약 전문가이자 정보 추출 마스터입니다. STT로 변환된 녹취록을 '학습 및 정보 지득'에 가장 최적화된 형태로 상세하게 분석하고 구조화해야 합니다.
-
-[Task]
-다음 텍스트에서 누락되는 핵심 정보가 없도록 구체적이고 체계적으로 정리하세요.
+당신은 AI 회의/강의 요약 전문가입니다. STT 녹취록을 학습에 최적화된 형태로 구조화하세요.
 
 [Rules]
-1. '어', '그', '음' 같은 무의미한 추임새는 제거하고, STT 오탈자는 문맥에 맞게 보정하세요. 거짓말이나 상상해서 지어내는 것은 절대 금지합니다.
-2. 단순한 요약이 아닌, 사용자가 이 내용만 보고도 학습할 수 있도록 **상세한 불렛포인트**와 **하위 항목(Sub-bullets)**을 적극 활용하세요.
-3. 중요한 개념, 수치, 고유명사, 결정사항 등은 강조(Bold) 처리하여 정보의 가시성을 높이세요.
-4. 문맥이 잘려 불완전하다면 무리하게 결론을 내지 말고, 제공된 팩트(Fact)까지만 상세히 기술하세요.
+1. 추임새 제거, 오탈자 보정
+2. 상세한 불렛포인트와 하위 항목 사용
+3. 중요한 개념, 수치, 고유명사는 강조 처리
+4. 불완전한 문맥은 추측하지 말고 사실까지만 정리
 
-[Output Format (예시)]
-- **[주요 키워드 또는 개념]**
-  - 상세 설명 및 구체적인 팩트 1
-  - 상세 설명 및 구체적인 팩트 2 (필요시 수치/데이터 포함)
+[Output Format]
+- **주요 키워드**
+  - 상세 설명
+  - 핵심 사실
 
 [Input]
 - 제목: ${titleInput.value || '미정'}
 - 내용: ${chunk}
 `;
-    const result = await callGeminiAPI(prompt, chunk);
-    
-    if (result) {
-        lastProcessedLength = fullTranscript.length;
-        summaryHistory.push(result);
-        const block = document.createElement('div');
-        block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs animate-fade-in';
-        block.innerHTML = marked.parse(result);
-        
-        if (interimSummaryDiv.querySelector('p.italic')) interimSummaryDiv.innerHTML = '';
-        interimSummaryDiv.appendChild(block);
-        interimSummaryDiv.scrollTop = interimSummaryDiv.scrollHeight;
-        
-        // 요약 성공 시 다운로드 버튼 활성화
-        document.getElementById('saveInterimSummaryBtn').disabled = false;
-    }
-    
-    isSummarizing = false;
-    document.getElementById('interimSummaryLoader').classList.add('hidden');
-}
-        const result = await callGeminiAPI(prompt, chunk);
-            
+
+            const result = await callGeminiAPI(prompt, chunk);
+
             if (result) {
                 lastProcessedLength = fullTranscript.length;
                 summaryHistory.push(result);
                 const block = document.createElement('div');
-                block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs animate-fade-in';
+                block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs max-w-none';
                 block.innerHTML = marked.parse(result);
-                
+
                 if (interimSummaryDiv.querySelector('p.italic')) interimSummaryDiv.innerHTML = '';
                 interimSummaryDiv.appendChild(block);
                 interimSummaryDiv.scrollTop = interimSummaryDiv.scrollHeight;
+                document.getElementById('saveInterimSummaryBtn').disabled = false;
             }
-            
+
             isSummarizing = false;
             document.getElementById('interimSummaryLoader').classList.add('hidden');
+            lucide.createIcons();
         }
 
         async function generateFinalSummary() {
@@ -385,42 +355,40 @@ async function processInterimSummary() {
                 updateStatus('대기 중', 'idle');
                 return;
             }
+
             updateStatus('최종 분석 중...', 'processing');
-            
+
             const prompt = `[System]
-당신은 최고 수준의 비즈니스 분석가이자 교육 콘텐츠 에디터입니다. 녹취록 데이터를 바탕으로 완벽한 형태의 최종 마크다운 문서를 작성해야 합니다.
+당신은 최고 수준의 비즈니스 분석가이자 교육 콘텐츠 에디터입니다.
 
 [Task]
-제공된 전체 녹취록과 가이드라인을 바탕으로 [제목: ${titleInput.value || '미정'}]에 대한 전문적인 노트를 작성하세요.
+제공된 전체 녹취록과 가이드를 바탕으로 전문적인 최종 마크다운 문서를 작성하세요.
 
 [Rules]
-1. 사용자가 제공한 [가이드]를 최우선으로 반영하여 문서의 초점을 맞추세요.
-2. 원본에 없는 내용을 절대 지어내지 마세요. 사실 확인이 불가능한 내용은 배제합니다.
-3. 아래의 [Output Format]을 반드시 준수하여 마크다운으로 출력하세요.
+1. 가이드를 우선 반영
+2. 원본에 없는 내용은 작성 금지
+3. 아래 형식을 반드시 준수
 
 [Output Format]
 # ${titleInput.value || '미정'}
-> **한 줄 요약:** (전체 내용을 관통하는 1~2줄의 핵심 요약)
+> **한 줄 요약:** 전체 핵심 요약
 
-## 1. 개요 (Overview)
-- **배경 및 목적:** 
-- **핵심 주제:** 
+## 1. 개요
+- **배경 및 목적:**
+- **핵심 주제:**
 
-## 2. 주요 내용 (Main Points)
-- **(핵심 키워드/소주제 1)**
-  - (상세 내용 1)
-  - (상세 내용 2)
-- **(핵심 키워드/소주제 2)**
-  - (상세 내용 1)
-  - (상세 내용 2)
+## 2. 주요 내용
+- **핵심 키워드 1**
+  - 상세 내용
+- **핵심 키워드 2**
+  - 상세 내용
 
 [Input]
 - 가이드: ${contextInput.value}
-- 전체 녹취록: ${fullTranscript}
-`;
-            
+- 전체 녹취록: ${fullTranscript}`;
+
             const result = await callGeminiAPI(prompt, fullTranscript);
-            
+
             if (result) {
                 finalSummaryRawMarkdown = result;
                 finalSummaryDiv.innerHTML = marked.parse(result);
@@ -431,19 +399,16 @@ async function processInterimSummary() {
             }
         }
 
-        // ----------------------------------------------------
-        // 음성 인식 로직 (브라우저 Web Speech API)
-        // ----------------------------------------------------
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        
+
         if (window.SpeechRecognition) {
             recognition = new window.SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'ko-KR';
 
-            recognition.onstart = () => { 
-                isRecognizing = true; 
+            recognition.onstart = () => {
+                isRecognizing = true;
             };
 
             recognition.onresult = (event) => {
@@ -459,52 +424,45 @@ async function processInterimSummary() {
                     document.getElementById('saveTranscriptTxtBtn').disabled = false;
                 }
             };
-            
+
             recognition.onerror = (e) => {
-                console.warn("Speech Recognition Error:", e.error);
-                if(e.error === 'not-allowed') {
-                    showError("마이크 권한이 거부되었습니다. 주소창 자물쇠 아이콘을 눌러 권한을 허용해주세요.");
+                console.warn('Speech Recognition Error:', e.error);
+                if (e.error === 'not-allowed') {
+                    showError('마이크 권한이 거부되었습니다. 브라우저 권한을 허용해주세요.');
                     stopRecordingAndAnalyze();
                 }
             };
 
-            recognition.onend = () => { 
+            recognition.onend = () => {
                 isRecognizing = false;
-                // 크롬 등에서 자동 중지될 경우 재시작 로직
                 if (isRecording) {
                     setTimeout(() => {
                         if (isRecording && !isRecognizing) {
-                            try { recognition.start(); } catch(e) {}
+                            try { recognition.start(); } catch (e) {}
                         }
                     }, 300);
                 }
             };
         }
 
-        // ----------------------------------------------------
-        // 버튼 이벤트 컨트롤
-        // ----------------------------------------------------
         async function stopRecordingAndAnalyze() {
             isRecording = false;
-            
-            // 엔진이 실행 중일 때만 명시적으로 정지
-            if(recognition && isRecognizing) {
-                try { recognition.stop(); } catch(e) {}
-            }
-            if(summaryInterval) clearInterval(summaryInterval);
 
-            // 텍스트가 전혀 없으면 조용히 초기화
+            if (recognition && isRecognizing) {
+                try { recognition.stop(); } catch (e) {}
+            }
+            if (summaryInterval) clearInterval(summaryInterval);
+
             if (fullTranscript.trim().length === 0) {
                 isProcessing = false;
                 updateStatus('대기 중', 'idle');
                 micIconContainer.innerHTML = '<i data-lucide="mic" class="h-10 w-10"></i>';
                 recordBtn.classList.remove('pulse-live', 'bg-rose-600', 'bg-slate-700', 'cursor-not-allowed', 'opacity-80');
                 recordBtn.classList.add('bg-gradient-to-br', 'from-sky-500', 'to-indigo-600', 'hover:scale-105');
-                lucide.createIcons();
-                
                 transcriptDiv.innerHTML = '<p class="text-slate-600 italic">마이크 권한을 허용하고 녹음을 시작하세요.</p>';
                 interimSummaryDiv.innerHTML = '<p class="text-slate-600 italic">자동 요약 대기 중...</p>';
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-600">녹음 종료 후 전체 내용을 분석하여 완벽한 노트가 생성됩니다.</div>';
+                lucide.createIcons();
                 return;
             }
 
@@ -516,21 +474,20 @@ async function processInterimSummary() {
             lucide.createIcons();
 
             try {
-                await processInterimSummary(); // 남은 청크 처리
-                await generateFinalSummary();  // 최종 문서 생성
+                await processInterimSummary();
+                await generateFinalSummary();
             } catch (err) {
                 console.error(err);
-                showError("분석 중 오류가 발생했습니다.");
+                showError('분석 중 오류가 발생했습니다.');
             } finally {
                 isProcessing = false;
                 micIconContainer.innerHTML = '<i data-lucide="mic" class="h-10 w-10"></i>';
                 recordBtn.classList.remove('bg-slate-700', 'cursor-not-allowed', 'opacity-80');
                 recordBtn.classList.add('bg-gradient-to-br', 'from-sky-500', 'to-indigo-600', 'hover:scale-105');
-                lucide.createIcons();
-                
                 if (statusText.textContent.includes('분석 중') || statusText.textContent.includes('처리 중')) {
                     updateStatus('대기 중', 'idle');
                 }
+                lucide.createIcons();
             }
         }
 
@@ -538,53 +495,52 @@ async function processInterimSummary() {
             e.preventDefault();
 
             if (!recognition) {
-                showError("현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 환경을 이용해주세요.");
+                showError('현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 환경을 이용해주세요.');
                 return;
             }
 
             if (isProcessing) {
-                showError("이전 녹음 데이터를 분석 중입니다. 잠시만 기다려주세요.");
+                showError('이전 녹음 데이터를 분석 중입니다. 잠시만 기다려주세요.');
                 return;
             }
 
             if (!isRecording) {
                 const currentKey = apiKeyInput.value.trim();
-                if (!currentKey) { 
-                    showError("API 키를 반드시 입력해주세요."); 
+                if (!currentKey) {
+                    showError('API 키를 반드시 입력해주세요.');
                     apiKeyInput.focus();
-                    return; 
+                    return;
                 }
-                
+
                 isRecording = true;
-                fullTranscript = ''; summaryHistory = []; lastProcessedLength = 0;
-                transcriptDiv.innerHTML = '<p class="text-slate-600 italic">녹음 중입니다... 말씀을 시작하세요.</p>'; 
+                fullTranscript = '';
+                summaryHistory = [];
+                lastProcessedLength = 0;
+                finalSummaryRawMarkdown = '';
+                document.getElementById('saveTranscriptTxtBtn').disabled = true;
+                document.getElementById('saveInterimSummaryBtn').disabled = true;
+                document.getElementById('saveFinalSummaryDocBtn').disabled = true;
+                transcriptDiv.innerHTML = '<p class="text-slate-600 italic">녹음 중입니다... 말씀을 시작하세요.</p>';
                 interimSummaryDiv.innerHTML = '<p class="text-slate-600 italic">요약 분석 대기 중...</p>';
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-600">녹음 종료 후 분석이 시작됩니다.</div>';
-                
+
                 try {
-                    // 음성 인식 강제 시작
-                    if (!isRecognizing) {
-                        recognition.start();
-                    }
+                    if (!isRecognizing) recognition.start();
                     updateStatus('녹음 중...', 'recording');
                     micIconContainer.innerHTML = '<i data-lucide="square" class="h-10 w-10 fill-current"></i>';
                     recordBtn.classList.add('pulse-live', 'bg-rose-600');
                     recordBtn.classList.remove('from-sky-500', 'to-indigo-600');
                     lucide.createIcons();
-                    
-                    // 15초 간격으로 실시간 요약 실행
                     summaryInterval = setInterval(processInterimSummary, 15000);
                 } catch (err) {
-                    showError("마이크 시작 오류: " + err.message);
+                    showError('마이크 시작 오류: ' + err.message);
                     isRecording = false;
                 }
             } else {
-                // 이미 녹음 중이면 정지 후 분석
                 stopRecordingAndAnalyze();
             }
         });
 
-        // 비밀번호 표시 토글
         document.getElementById('toggleApiKey').addEventListener('click', (e) => {
             e.preventDefault();
             apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
@@ -592,42 +548,145 @@ async function processInterimSummary() {
             lucide.createIcons();
         });
 
-        // TXT 다운로드
         document.getElementById('saveTranscriptTxtBtn').addEventListener('click', (e) => {
             e.preventDefault();
-            if(!fullTranscript) return;
+            if (!fullTranscript) return;
             const blob = new Blob([fullTranscript], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = `${titleInput.value || '강의록'}_원본.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-        });
-        
-        // Word 다운로드
-        document.getElementById('saveFinalSummaryDocBtn').addEventListener('click', (e) => {
-            e.preventDefault();
-            if(!finalSummaryRawMarkdown) return;
-            const html = `<html><head><meta charset="utf-8"></head><body style="font-family: sans-serif;">${marked.parse(finalSummaryRawMarkdown)}</body></html>`;
-            const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `${titleInput.value || '강의노트'}.doc`;
+            a.href = url;
+            a.download = `${titleInput.value || '강의록'}_원본.txt`;
             a.click();
             URL.revokeObjectURL(url);
         });
 
-    
-    // 15초 단위로 생성된 요약 히스토리를 하나의 마크다운 문서로 병합
+        document.getElementById('saveFinalSummaryDocBtn').addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!finalSummaryRawMarkdown) return;
+
+            try {
+                const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } = docx;
+
+                const lines = finalSummaryRawMarkdown.split('\n');
+                const children = [];
+
+                for (const line of lines) {
+                    const trimmed = line.trimEnd();
+
+                    if (trimmed.startsWith('# ')) {
+                        children.push(new Paragraph({
+                            text: trimmed.slice(2),
+                            heading: HeadingLevel.HEADING_1,
+                            spacing: { after: 200 }
+                        }));
+                    } else if (trimmed.startsWith('## ')) {
+                        children.push(new Paragraph({
+                            text: trimmed.slice(3),
+                            heading: HeadingLevel.HEADING_2,
+                            spacing: { before: 240, after: 120 }
+                        }));
+                    } else if (trimmed.startsWith('### ')) {
+                        children.push(new Paragraph({
+                            text: trimmed.slice(4),
+                            heading: HeadingLevel.HEADING_3,
+                            spacing: { before: 160, after: 80 }
+                        }));
+                    } else if (trimmed.startsWith('> ')) {
+                        children.push(new Paragraph({
+                            children: [new TextRun({ text: trimmed.slice(2), italics: true, color: '555555' })],
+                            indent: { left: 720 },
+                            spacing: { after: 120 },
+                            border: { left: { style: BorderStyle.SINGLE, size: 6, color: '4A9EBE' } }
+                        }));
+                    } else if (/^(\s*)-\s+\*\*(.+?)\*\*(.*)$/.test(trimmed)) {
+                        const m = trimmed.match(/^(\s*)-\s+\*\*(.+?)\*\*(.*)$/);
+                        const indent = m[1].length > 0 ? 1440 : 720;
+                        children.push(new Paragraph({
+                            children: [
+                                new TextRun({ text: m[2], bold: true }),
+                                new TextRun({ text: m[3] || '' })
+                            ],
+                            bullet: { level: m[1].length > 0 ? 1 : 0 },
+                            spacing: { after: 60 }
+                        }));
+                    } else if (/^(\s*)-\s+(.+)$/.test(trimmed)) {
+                        const m = trimmed.match(/^(\s*)-\s+(.+)$/);
+                        const isSubBullet = m[1].length > 0;
+                        let runText = m[2].replace(/\*\*(.+?)\*\*/g, '$1');
+                        const hasBold = /\*\*/.test(m[2]);
+                        children.push(new Paragraph({
+                            children: [new TextRun({ text: runText, bold: false })],
+                            bullet: { level: isSubBullet ? 1 : 0 },
+                            spacing: { after: 60 }
+                        }));
+                    } else if (trimmed === '---') {
+                        children.push(new Paragraph({
+                            children: [],
+                            border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CCCCCC' } },
+                            spacing: { before: 120, after: 120 }
+                        }));
+                    } else if (trimmed === '') {
+                        children.push(new Paragraph({ text: '', spacing: { after: 60 } }));
+                    } else {
+                        const boldParts = trimmed.split(/\*\*(.+?)\*\*/g);
+                        const runs = boldParts.map((part, idx) =>
+                            new TextRun({ text: part, bold: idx % 2 === 1 })
+                        );
+                        children.push(new Paragraph({ children: runs, spacing: { after: 80 } }));
+                    }
+                }
+
+                const docTitle = titleInput.value || '강의노트';
+                const now = new Date().toLocaleString('ko-KR');
+
+                const document = new Document({
+                    styles: {
+                        default: {
+                            document: {
+                                run: { font: 'Malgun Gothic', size: 22 }
+                            }
+                        }
+                    },
+                    sections: [{
+                        properties: {
+                            page: {
+                                margin: { top: 1440, right: 1080, bottom: 1440, left: 1080 }
+                            }
+                        },
+                        children: [
+                            new Paragraph({
+                                children: [new TextRun({ text: '생성일시: ' + now, size: 18, color: '888888' })],
+                                alignment: AlignmentType.RIGHT,
+                                spacing: { after: 240 }
+                            }),
+                            ...children
+                        ]
+                    }]
+                });
+
+                const blob = await Packer.toBlob(document);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${docTitle}.docx`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error(err);
+                showError('.docx 생성 오류: ' + err.message);
+            }
+        });
+
         document.getElementById('saveInterimSummaryBtn').addEventListener('click', (e) => {
             e.preventDefault();
             if (summaryHistory.length === 0) return;
-            const mdHeader = `# ${titleInput.value || '강의 실시간 요약'}\n> 본 문서는 AI가 실시간으로 분석한 정보 지득용 상세 요약본입니다.\n\n---\n\n`;
+            const mdHeader = `# ${titleInput.value || '강의 실시간 요약'}\n> 본 문서는 AI가 실시간으로 분석한 상세 요약본입니다.\n\n---\n\n`;
             const mdContent = mdHeader + summaryHistory.join('\n\n---\n\n');
             const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = `${titleInput.value || '실시간요약_상세'}.md`;
+            a.href = url;
+            a.download = `${titleInput.value || '실시간요약_상세'}.md`;
             a.click();
             URL.revokeObjectURL(url);
         });
