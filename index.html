@@ -526,6 +526,11 @@
         let summaryInterval = null;
         let summaryHistory = [];
         let finalSummaryRawMarkdown = '';
+        let hadNetworkError = false;
+        let lastNetworkErrorTime = 0;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioStream = null;
 
         // Firebase State
         let fbApp = null;
@@ -768,7 +773,16 @@ ${chunk}
                     showError('마이크 권한이 거부되었습니다. 마이크 입력을 허용해 주십시오.');
                     stopRecordingAndAnalyze();
                 } else if (e.error === 'network') {
-                    showError('네트워크 연결이 불안정합니다. 음성 입력을 재시도합니다.');
+                    hadNetworkError = true;
+                    const now = Date.now();
+                    // 15초에 한 번만 Toast 출력하여 반복적인 UI 도배 방지
+                    if (now - lastNetworkErrorTime > 15000) {
+                        showError('네트워크 연결이 불안정합니다. 백그라운드에서 재연결을 시도합니다.');
+                        lastNetworkErrorTime = now;
+                    }
+                } else if (e.error === 'audio-capture') {
+                    showError('마이크 오디오 캡처에 실패했습니다. 마이크 하드웨어 장치를 연결해 주십시오.');
+                    stopRecordingAndAnalyze();
                 }
             };
 
@@ -776,6 +790,10 @@ ${chunk}
                 isRecognizing = false;
                 
                 if (isRecording) {
+                    // 네트워크 장애가 났던 상태라면 리커버리 속도를 주기 위해 대기시간(3초)을 늘려 루프 통신 과부하 방지
+                    const restartDelay = hadNetworkError ? 3000 : 400;
+                    hadNetworkError = false; 
+                    
                     setTimeout(() => {
                         if (isRecording && !isRecognizing) {
                             try { 
@@ -784,7 +802,7 @@ ${chunk}
                                 console.error('음성 스냅샷 재시작 실패:', err);
                             }
                         }
-                    }, 400); 
+                    }, restartDelay); 
                 }
             };
         }
@@ -798,19 +816,7 @@ ${chunk}
             if (summaryInterval) clearInterval(summaryInterval);
 
             if (fullTranscript.trim().length === 0) {
-                isProcessing = false;
-                updateStatus('AI 대기 중', 'idle');
-                
-                // Reset Button
-                recordBtn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'border', 'border-red-500/40', 'pulse-live', 'opacity-75', 'cursor-not-allowed');
-                recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
-                micIconContainer.innerHTML = '<i data-lucide="mic" class="h-4 w-4"></i>';
-                document.getElementById('recordBtnText').textContent = '녹음 시작';
-
-                transcriptDiv.innerHTML = '<p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>';
-                interimSummaryDiv.innerHTML = '<p class="text-slate-650 italic">실시간 분석 대기 중...</p>';
-                finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-650 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>';
-                lucide.createIcons();
+                cleanupRecordingUI();
                 return;
             }
 
@@ -823,9 +829,45 @@ ${chunk}
             recordBtn.classList.add('opacity-75', 'cursor-not-allowed');
             lucide.createIcons();
 
+            // MediaRecorder 중지 및 오디오 바이너리 데이터 획득
+            let audioBlob = null;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                const recorderStoppedPromise = new Promise(resolve => {
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                        resolve(blob);
+                    };
+                });
+                try {
+                    mediaRecorder.stop();
+                } catch (e) {
+                    console.error('MediaRecorder stop failure:', e);
+                }
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                }
+                audioBlob = await recorderStoppedPromise;
+            }
+
             try {
+                // 실시간 요약 정리 마지막 1회 가동
                 await processInterimSummary();
-                await generateFinalSummary();
+
+                // 고정밀 오디오 파일 전송 및 분석 실행
+                let success = false;
+                if (audioBlob && audioBlob.size > 1000) {
+                    if (audioBlob.size <= 15 * 1024 * 1024) { // 15MB 이하
+                        success = await generateAudioBasedSummaryAndTranscript(audioBlob);
+                    } else {
+                        console.warn('녹음 오디오 파일 크기가 너무 큽니다 (15MB 초과). 텍스트 기반 요약으로 자동 폴백합니다.');
+                    }
+                }
+
+                // 오디오 전송에 실패하거나 데이터가 작으면 기존의 텍스트 기반 분석 폴백
+                if (!success) {
+                    console.log('기존 텍스트 속기본 기반 요약 폴백 실행...');
+                    await generateFinalSummary();
+                }
             } catch (err) {
                 console.error(err);
                 showError('노트 분석 요약 도중 오류가 발생했습니다.');
@@ -841,6 +883,169 @@ ${chunk}
                 }
                 lucide.createIcons();
             }
+        }
+
+        function cleanupRecordingUI() {
+            isProcessing = false;
+            updateStatus('AI 대기 중', 'idle');
+            micIconContainer.innerHTML = '<i data-lucide="mic" class="h-4 w-4"></i>';
+            recordBtn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'border', 'border-red-500/40', 'pulse-live', 'opacity-75', 'cursor-not-allowed');
+            recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
+            document.getElementById('recordBtnText').textContent = '녹음 시작';
+
+            transcriptDiv.innerHTML = '<p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>';
+            interimSummaryDiv.innerHTML = '<p class="text-slate-650 italic">실시간 분석 대기 중...</p>';
+            finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-650 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>';
+            lucide.createIcons();
+        }
+
+        async function generateAudioBasedSummaryAndTranscript(audioBlob) {
+            // Convert Blob to Base64
+            const base64Audio = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(audioBlob);
+            });
+
+            const currentKey = apiKeyInput.value.trim();
+            if (!currentKey) {
+                showError('Gemini API Key를 입력해주십시오.');
+                return false;
+            }
+
+            const model = 'gemini-1.5-flash';
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
+
+            updateStatus('고정밀 음성 및 요약 추출 중...', 'processing');
+
+            const systemPrompt = `
+당신은 강의록 및 세미나 회의록 요약을 작성하는 최고 권위의 인공지능 속기사이자 교육 에디터입니다.
+제공된 녹음 오디오(WebM Opus 포맷)를 정밀 분석하여 아래의 요청 사항을 한글로 정답을 도출하십시오.
+
+반드시 다음 JSON 형식으로 출력해야 합니다:
+{
+  "transcript": "오디오의 모든 한국어 발화를 100% 한글 텍스트로 고스란히 받아적은 것. 마침표, 쉼표, 물음표 등 문장부호와 맞춤법 및 띄어쓰기를 완벽히 보정하여 독자가 읽기 편한 완결된 문단 형태로 작성하십시오.",
+  "summary": "마크다운(Markdown) 포맷으로 작성된 강의/회의 요약 보고서 노트. 아래에 지정된 형식을 엄수해야 합니다."
+}
+
+[요약 보고서 형식 (summary 필드 값)]
+# [강의 및 회의 제목]
+> **핵심 요약:** 본 문서는 구글 AI가 회의 오디오를 고정밀 분석하여 요약한 최종 학술 강의록 보고서입니다.
+
+## 1. 개요 및 취지
+- **기록 목적 및 배경:**
+- **주요 핵심 주제:**
+
+## 2. 주요 핵심 내용
+- **[핵심 키워드 1]**
+  - 상세 설명 및 핵심 내용 정리
+- **[핵심 키워드 2]**
+  - 상세 설명 및 핵심 내용 정리
+`;
+
+            const payload = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: [{
+                    parts: [
+                        {
+                            inlineData: {
+                                mimeType: audioBlob.type || 'audio/webm',
+                                data: base64Audio
+                            }
+                        },
+                        {
+                            text: `[요약 지침 지시사항]
+- 강의/회의 제목: ${titleInput.value || '미정'}
+- 추가 요약 가이드 지침: ${contextInput.value || '없음'}
+
+위 오디오 녹음 데이터를 듣고, 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            transcript: { type: "STRING", description: "The full, punctuated, and corrected transcript of the audio in Korean." },
+                            summary: { type: "STRING", description: "The final formatted markdown summary report." }
+                        },
+                        required: ["transcript", "summary"]
+                    }
+                }
+            };
+
+            const delays = [1000, 2000, 4000, 8000];
+            let lastErrorMsg = '';
+
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        let errMsg = `HTTP ${response.status}`;
+                        try {
+                            const errData = await response.json();
+                            errMsg = errData.error?.message || errMsg;
+                        } catch (e) {}
+                        throw new Error(`[${response.status}] ${errMsg}`);
+                    }
+
+                    const data = await response.json();
+                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!rawText) throw new Error('API 응답에 텍스트 데이터가 없습니다.');
+
+                    let cleanedText = rawText.trim();
+                    if (cleanedText.startsWith('```')) {
+                        cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                    }
+                    const parsed = JSON.parse(cleanedText);
+                    if (parsed.transcript && parsed.summary) {
+                        // 1. 속기록 창 갈아끼우기
+                        fullTranscript = parsed.transcript;
+                        transcriptDiv.innerHTML = '';
+                        
+                        fullTranscript.split('\n').filter(l => l.trim()).forEach(line => {
+                            const bubble = document.createElement('div');
+                            bubble.className = 'transcript-bubble text-slate-300';
+                            bubble.textContent = line;
+                            transcriptDiv.appendChild(bubble);
+                        });
+                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                        document.getElementById('saveTranscriptTxtBtn').disabled = false;
+
+                        // 2. 최종 요약집 갱신
+                        finalSummaryRawMarkdown = parsed.summary;
+                        finalSummaryDiv.innerHTML = marked.parse(finalSummaryRawMarkdown);
+                        document.getElementById('saveFinalSummaryDocBtn').disabled = false;
+                        
+                        updateStatus('분석 요약 완료', 'idle');
+                        showToast('오디오 고정밀 속기록 및 최종 보고서 작성을 완료했습니다.', 'success');
+                        
+                        if (fbDb) saveToFirebase(!!currentDocId);
+                        return true;
+                    } else {
+                        throw new Error('응답 JSON에 필수 필드가 유실되었습니다.');
+                    }
+                } catch (error) {
+                    lastErrorMsg = error.message;
+                    console.warn(`오디오 분석 API 호출 시도 ${i+1} 실패:`, lastErrorMsg);
+                    if (lastErrorMsg.includes('[400]') || lastErrorMsg.includes('[403]') || lastErrorMsg.includes('[404]')) break;
+                    if (i === delays.length) break;
+                    await new Promise(r => setTimeout(r, delays[i]));
+                }
+            }
+
+            console.error('고정밀 오디오 분석 실패, 기존 텍스트 분석으로 전환합니다:', lastErrorMsg);
+            return false;
         }
 
         recordBtn.addEventListener('click', async (e) => {
@@ -865,6 +1070,8 @@ ${chunk}
                 }
 
                 isRecording = true;
+                hadNetworkError = false;
+                lastNetworkErrorTime = 0;
                 fullTranscript = '';
                 summaryHistory = [];
                 lastProcessedLength = 0;
@@ -877,6 +1084,29 @@ ${chunk}
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-500 text-xs">강의를 녹음하는 중입니다...</div>';
 
                 try {
+                    // MediaRecorder 녹음 초기화 및 가동
+                    audioChunks = [];
+                    try {
+                        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        let options = { mimeType: 'audio/webm' };
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: 'audio/ogg' };
+                        }
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: '' }; 
+                        }
+                        mediaRecorder = new MediaRecorder(audioStream, options);
+                        mediaRecorder.ondataavailable = (event) => {
+                            if (event.data.size > 0) {
+                                audioChunks.push(event.data);
+                            }
+                        };
+                        mediaRecorder.start();
+                    } catch (mErr) {
+                        console.warn('백그라운드 미디어 레코더 녹음 시작 오류 (고정밀 분석 불가):', mErr);
+                        mediaRecorder = null;
+                    }
+
                     if (!isRecognizing) recognition.start();
                     updateStatus('오디오 기록 중', 'recording');
                     
