@@ -528,9 +528,6 @@
         let finalSummaryRawMarkdown = '';
         let hadNetworkError = false;
         let lastNetworkErrorTime = 0;
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let audioStream = null;
 
         // Firebase State
         let fbApp = null;
@@ -585,7 +582,7 @@
                 return null;
             }
 
-            const model = 'gemini-3.1-flash-lite-preview';
+            const model = 'gemini-3.1-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
             const payload = {
                 systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -742,28 +739,29 @@ ${chunk}
             };
 
             recognition.onresult = (event) => {
+                let interimTranscript = '';
                 let finalChunk = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
                         finalChunk += event.results[i][0].transcript + ' ';
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
                     }
                 }
                 
                 if (finalChunk) {
                     fullTranscript += finalChunk;
-                    if (transcriptDiv.querySelector('p.italic')) transcriptDiv.innerHTML = '';
-                    
-                    const bubble = document.createElement('div');
-                    bubble.className = 'transcript-bubble text-slate-300';
-                    bubble.textContent = finalChunk.trim();
-                    transcriptDiv.appendChild(bubble);
-                    
-                    requestAnimationFrame(() => {
-                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
-                    });
-                    
+                    const lp = document.getElementById('liveParagraph');
+                    if (lp) lp.textContent = fullTranscript;
                     document.getElementById('saveTranscriptTxtBtn').disabled = false;
                 }
+                
+                const ispan = document.getElementById('interimSpan');
+                if (ispan) ispan.textContent = interimTranscript;
+                
+                requestAnimationFrame(() => {
+                    transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                });
             };
 
             recognition.onerror = (e) => {
@@ -829,43 +827,18 @@ ${chunk}
             recordBtn.classList.add('opacity-75', 'cursor-not-allowed');
             lucide.createIcons();
 
-            // MediaRecorder 중지 및 오디오 바이너리 데이터 획득
-            let audioBlob = null;
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                const recorderStoppedPromise = new Promise(resolve => {
-                    mediaRecorder.onstop = () => {
-                        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-                        resolve(blob);
-                    };
-                });
-                try {
-                    mediaRecorder.stop();
-                } catch (e) {
-                    console.error('MediaRecorder stop failure:', e);
-                }
-                if (audioStream) {
-                    audioStream.getTracks().forEach(track => track.stop());
-                }
-                audioBlob = await recorderStoppedPromise;
-            }
-
             try {
                 // 실시간 요약 정리 마지막 1회 가동
                 await processInterimSummary();
 
-                // 고정밀 오디오 파일 전송 및 분석 실행
+                // 텍스트 기반 고정밀 AI 보정 및 요약 실행
                 let success = false;
-                if (audioBlob && audioBlob.size > 1000) {
-                    if (audioBlob.size <= 15 * 1024 * 1024) { // 15MB 이하
-                        success = await generateAudioBasedSummaryAndTranscript(audioBlob);
-                    } else {
-                        console.warn('녹음 오디오 파일 크기가 너무 큽니다 (15MB 초과). 텍스트 기반 요약으로 자동 폴백합니다.');
-                    }
+                if (fullTranscript.trim().length > 10) {
+                    success = await generateHighAccuracyTextAndSummary();
                 }
 
-                // 오디오 전송에 실패하거나 데이터가 작으면 기존의 텍스트 기반 분석 폴백
                 if (!success) {
-                    console.log('기존 텍스트 속기본 기반 요약 폴백 실행...');
+                    console.log('고정밀 텍스트 분석 실패, 일반 요약 폴백 실행...');
                     await generateFinalSummary();
                 }
             } catch (err) {
@@ -899,36 +872,25 @@ ${chunk}
             lucide.createIcons();
         }
 
-        async function generateAudioBasedSummaryAndTranscript(audioBlob) {
-            // Convert Blob to Base64
-            const base64Audio = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64String = reader.result.split(',')[1];
-                    resolve(base64String);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(audioBlob);
-            });
-
+        async function generateHighAccuracyTextAndSummary() {
             const currentKey = apiKeyInput.value.trim();
             if (!currentKey) {
                 showError('Gemini API Key를 입력해주십시오.');
                 return false;
             }
 
-            const model = 'gemini-1.5-flash';
+            const model = 'gemini-3.1-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
-            updateStatus('고정밀 음성 및 요약 추출 중...', 'processing');
+            updateStatus('고정밀 텍스트 교정 및 요약 중...', 'processing');
 
             const systemPrompt = `
 당신은 강의록 및 세미나 회의록 요약을 작성하는 최고 권위의 인공지능 속기사이자 교육 에디터입니다.
-제공된 녹음 오디오(WebM Opus 포맷)를 정밀 분석하여 아래의 요청 사항을 한글로 정답을 도출하십시오.
+제공된 거친 속기록(음성 인식 텍스트)을 정밀 분석하여 문장부호를 복구하고 아래의 요청 사항을 한글로 도출하십시오.
 
 반드시 다음 JSON 형식으로 출력해야 합니다:
 {
-  "transcript": "오디오의 모든 한국어 발화를 100% 한글 텍스트로 고스란히 받아적은 것. 마침표, 쉼표, 물음표 등 문장부호와 맞춤법 및 띄어쓰기를 완벽히 보정하여 독자가 읽기 편한 완결된 문단 형태로 작성하십시오.",
+  "transcript": "거친 속기록을 바탕으로 마침표, 쉼표, 물음표 등 문장부호와 맞춤법 및 띄어쓰기를 완벽히 보정하여 독자가 읽기 편한 완결된 문단 형태로 재작성한 것.",
   "summary": "마크다운(Markdown) 포맷으로 작성된 강의/회의 요약 보고서 노트. 아래에 지정된 형식을 엄수해야 합니다."
 }
 
@@ -952,17 +914,11 @@ ${chunk}
                 contents: [{
                     parts: [
                         {
-                            inlineData: {
-                                mimeType: audioBlob.type || 'audio/webm',
-                                data: base64Audio
-                            }
-                        },
-                        {
-                            text: `[요약 지침 지시사항]
+                            text: `[거친 실시간 속기록 원본]\n${fullTranscript}\n\n[요약 지침 지시사항]
 - 강의/회의 제목: ${titleInput.value || '미정'}
 - 추가 요약 가이드 지침: ${contextInput.value || '없음'}
 
-위 오디오 녹음 데이터를 듣고, 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
+위 속기록을 바탕으로, 완벽히 교정된 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
                         }
                     ]
                 }],
@@ -1011,14 +967,8 @@ ${chunk}
                     if (parsed.transcript && parsed.summary) {
                         // 1. 속기록 창 갈아끼우기
                         fullTranscript = parsed.transcript;
-                        transcriptDiv.innerHTML = '';
-                        
-                        fullTranscript.split('\n').filter(l => l.trim()).forEach(line => {
-                            const bubble = document.createElement('div');
-                            bubble.className = 'transcript-bubble text-slate-300';
-                            bubble.textContent = line;
-                            transcriptDiv.appendChild(bubble);
-                        });
+                        transcriptDiv.innerHTML = '<p id="liveParagraph" class="text-slate-300 leading-relaxed whitespace-pre-wrap inline"></p><span id="interimSpan" class="text-slate-500 italic ml-1"></span>';
+                        document.getElementById('liveParagraph').textContent = fullTranscript;
                         transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
                         document.getElementById('saveTranscriptTxtBtn').disabled = false;
 
@@ -1079,34 +1029,12 @@ ${chunk}
                 document.getElementById('saveTranscriptTxtBtn').disabled = true;
                 document.getElementById('saveInterimSummaryBtn').disabled = true;
                 document.getElementById('saveFinalSummaryDocBtn').disabled = true;
-                transcriptDiv.innerHTML = '';
+                transcriptDiv.innerHTML = '<p id="liveParagraph" class="text-slate-300 leading-relaxed inline"></p><span id="interimSpan" class="text-slate-500 italic ml-1"></span>';
                 interimSummaryDiv.innerHTML = '<p class="text-slate-500 italic">실시간 문맥 분석 대기 중...</p>';
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-500 text-xs">강의를 녹음하는 중입니다...</div>';
 
                 try {
-                    // MediaRecorder 녹음 초기화 및 가동
-                    audioChunks = [];
-                    try {
-                        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        let options = { mimeType: 'audio/webm' };
-                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                            options = { mimeType: 'audio/ogg' };
-                        }
-                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                            options = { mimeType: '' }; 
-                        }
-                        mediaRecorder = new MediaRecorder(audioStream, options);
-                        mediaRecorder.ondataavailable = (event) => {
-                            if (event.data.size > 0) {
-                                audioChunks.push(event.data);
-                            }
-                        };
-                        mediaRecorder.start();
-                    } catch (mErr) {
-                        console.warn('백그라운드 미디어 레코더 녹음 시작 오류 (고정밀 분석 불가):', mErr);
-                        mediaRecorder = null;
-                    }
-
+                    // Start SpeechRecognition immediately to avoid dropping first words!
                     if (!isRecognizing) recognition.start();
                     updateStatus('오디오 기록 중', 'recording');
                     
