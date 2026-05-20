@@ -266,17 +266,13 @@
                 <!-- Left Column (Live Transcript & Live AI Summary) -->
                 <div class="flex flex-col gap-4 min-h-0 h-full">
                     
-                    <!-- Live Transcript (With Tabs to prevent data loss) -->
+                    <!-- AI Polished Transcript Panel -->
                     <div class="premium-card rounded-2xl flex flex-col flex-1 min-h-0 shadow-md">
                         <div class="px-4 py-2.5 border-b border-slate-850/60 bg-slate-900/35 flex justify-between items-center shrink-0">
                             <div class="flex items-center gap-3">
                                 <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mr-1">
-                                    <i data-lucide="mic" class="h-4 w-4 text-blue-400"></i> 속기록
+                                    <i data-lucide="sparkles" class="h-4 w-4 text-blue-400"></i> AI 교정 속기록
                                 </h2>
-                                <div class="flex bg-slate-950 p-0.5 rounded-lg border border-slate-850">
-                                    <button type="button" id="tabRawTranscript" class="px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20">실시간 원본</button>
-                                    <button type="button" id="tabAiTranscript" class="px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent">AI 맞춤법 교정본</button>
-                                </div>
                             </div>
                             <button type="button" id="saveTranscriptTxtBtn" disabled class="save-btn group">
                                 <i data-lucide="download" class="h-3.5 w-3.5"></i>
@@ -284,13 +280,8 @@
                             </button>
                         </div>
                         <div class="relative flex-grow min-h-0 flex flex-col">
-                            <!-- Raw Transcript Box -->
-                            <div id="transcript" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
-                                <p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>
-                            </div>
-                            <!-- AI Polished Transcript Box -->
-                            <div id="aiTranscriptContainer" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300 hidden">
-                                <p class="text-slate-650 italic">강의 종료 후 고정밀 AI 분석이 실행되면 교정본이 이곳에 출력됩니다.</p>
+                            <div id="aiTranscriptContainer" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
+                                <p class="text-slate-650 italic">녹음이 시작되면 300단어마다 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>
                             </div>
                         </div>
                     </div>
@@ -597,10 +588,7 @@
         const apiKeyInput = document.getElementById('apiKey');
         const titleInput = document.getElementById('titleInput');
         const contextInput = document.getElementById('contextInput');
-        const transcriptDiv = document.getElementById('transcript');
         const aiTranscriptContainer = document.getElementById('aiTranscriptContainer');
-        const tabRawTranscript = document.getElementById('tabRawTranscript');
-        const tabAiTranscript = document.getElementById('tabAiTranscript');
         const interimSummaryDiv = document.getElementById('interimSummary');
         const finalSummaryDiv = document.getElementById('finalSummary');
         const errorToast = document.getElementById('error-message');
@@ -735,23 +723,30 @@ ${chunk}
             lucide.createIcons();
         }
 
-        async function triggerChunkPolishing() {
+        async function triggerChunkPolishing(isFinal = false) {
             const currentKey = apiKeyInput.value.trim();
             if (!currentKey || isPolishingChunk || !isRecording) return;
 
             const startIdx = lastPolishedLength;
             const endIdx = fullTranscript.length;
             const chunk = fullTranscript.substring(startIdx, endIdx).trim();
-            if (chunk.length < 50) return;
+            
+            const words = chunk ? chunk.split(/\s+/) : [];
+            const minWords = isFinal ? 5 : 300;
+            if (words.length < minWords) return;
 
             isPolishingChunk = true;
+            document.getElementById('interimSummaryLoader').classList.remove('hidden');
 
             const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
-            const prompt = `당신은 실시간 속기 교정 에디터입니다. 아래 제공된 한국어 음성 인식 텍스트(거친 텍스트)를 문맥에 맞게 맞춤법을 교정하고 문장부호(마침표, 쉼표 등)를 채워 넣으십시오.
-절대 내용을 요약하거나 단어를 누락하지 말고, 원문의 모든 정보를 온전히 보존하십시오.
-답변에는 다른 설명 없이 오직 교정된 텍스트만 출력하십시오.`;
+            const prompt = `당신은 실시간 속기 및 요약 전문가입니다. 제공된 한국어 음성 인식 텍스트(거친 텍스트)를 맞춤법 교정하고, 동시에 해당 청크의 핵심을 불렛마크로 요약해 주십시오.
+반드시 아래 JSON 포맷을 그대로 준수하여 단 한 단어의 다른 부연설명도 없이 JSON 결과만 출력하십시오:
+{
+  "polishedText": "맞춤법, 띄어쓰기, 문장부호가 무손실로 완벽히 교정된 한국어 텍스트. 절대 요약하지 말고 원문의 모든 세부 정보를 온전히 보존하십시오.",
+  "bulletSummary": "이 청크에 대한 요약 불렛마크들 (마크다운 포맷. 예: - **핵심 주제**\\n  - 세부 내용)"
+}`;
 
             const payload = {
                 contents: [{
@@ -759,7 +754,18 @@ ${chunk}
                         { text: prompt },
                         { text: `[거친 텍스트]\n${chunk}` }
                     ]
-                }]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            polishedText: { type: "STRING" },
+                            bulletSummary: { type: "STRING" }
+                        },
+                        required: ["polishedText", "bulletSummary"]
+                    }
+                }
             };
 
             try {
@@ -771,38 +777,61 @@ ${chunk}
 
                 if (response.ok) {
                     const data = await response.json();
-                    const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (result) {
-                        const cleanedResult = result.trim();
-                        
-                        // Append to aiTranscript
-                        if (aiTranscript.length > 0) {
-                            aiTranscript += ' ' + cleanedResult;
-                        } else {
-                            aiTranscript = cleanedResult;
+                    const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (rawJson) {
+                        const parsed = JSON.parse(rawJson.trim());
+                        const polishedText = parsed.polishedText || '';
+                        const bulletSummary = parsed.bulletSummary || '';
+
+                        if (polishedText) {
+                            // Append to aiTranscript
+                            if (aiTranscript.length > 0) {
+                                aiTranscript += ' ' + polishedText;
+                            } else {
+                                aiTranscript = polishedText;
+                            }
+
+                            // Update UI
+                            aiTranscriptContainer.innerHTML = '';
+                            const p = document.createElement('p');
+                            p.className = 'text-slate-300 leading-relaxed whitespace-pre-wrap';
+                            p.textContent = aiTranscript;
+                            aiTranscriptContainer.appendChild(p);
+                            aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
+                            document.getElementById('saveTranscriptTxtBtn').disabled = false;
                         }
 
-                        // Update AI Polished transcript UI
-                        aiTranscriptContainer.innerHTML = '';
-                        const p = document.createElement('p');
-                        p.className = 'text-slate-300 leading-relaxed whitespace-pre-wrap';
-                        p.textContent = aiTranscript;
-                        aiTranscriptContainer.appendChild(p);
-                        aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
-                        document.getElementById('saveTranscriptTxtBtn').disabled = false;
+                        if (bulletSummary) {
+                            // Update live summary
+                            summaryHistory.push(bulletSummary);
+                            const block = document.createElement('div');
+                            block.className = 'p-3 bg-slate-900/60 rounded-xl border border-slate-800/60 mb-3 prose prose-invert prose-xs max-w-none';
+                            block.innerHTML = marked.parse(bulletSummary);
+
+                            if (interimSummaryDiv.querySelector('p.italic')) {
+                                interimSummaryDiv.innerHTML = '';
+                            }
+                            interimSummaryDiv.appendChild(block);
+                            interimSummaryDiv.scrollTop = interimSummaryDiv.scrollHeight;
+                            document.getElementById('saveInterimSummaryBtn').disabled = false;
+                        }
 
                         // Advance the polished pointer
                         lastPolishedLength = endIdx;
                     }
                 }
             } catch (err) {
-                console.error('실시간 청크 교정 실패:', err);
+                console.error('실시간 청크 교정 및 요약 실패:', err);
             } finally {
                 isPolishingChunk = false;
+                document.getElementById('interimSummaryLoader').classList.add('hidden');
+                lucide.createIcons();
                 
                 // If more text has accumulated while calling the API, trigger again
-                if (fullTranscript.length - lastPolishedLength >= 300 && isRecording) {
-                    setTimeout(triggerChunkPolishing, 1000);
+                const remainingChunk = fullTranscript.substring(lastPolishedLength).trim();
+                const remainingWords = remainingChunk ? remainingChunk.split(/\s+/).length : 0;
+                if (remainingWords >= 300 && isRecording) {
+                    setTimeout(() => triggerChunkPolishing(false), 1000);
                 }
             }
         }
@@ -873,33 +902,26 @@ ${chunk}
 
              recognition.onresult = (event) => {
                 networkErrorCount = 0; // Reset network error count on successful recognition
-                let interimTranscript = '';
                 let finalChunk = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
                         finalChunk += event.results[i][0].transcript + ' ';
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
                     }
                 }
                 
                 if (finalChunk) {
                     fullTranscript += finalChunk;
-                    const lp = document.getElementById('liveParagraph');
-                    if (lp) lp.textContent = fullTranscript;
-                    document.getElementById('saveTranscriptTxtBtn').disabled = false;
                     
-                    // Trigger chunk-based real-time AI polishing every 300 characters
-                    if (fullTranscript.length - lastPolishedLength >= 300 && !isPolishingChunk) {
-                        triggerChunkPolishing();
+                    // Trigger chunk-based real-time AI polishing every 300 words
+                    const pendingChunk = fullTranscript.substring(lastPolishedLength).trim();
+                    const pendingWords = pendingChunk ? pendingChunk.split(/\s+/).length : 0;
+                    if (pendingWords >= 300 && !isPolishingChunk) {
+                        triggerChunkPolishing(false);
                     }
                 }
                 
-                const ispan = document.getElementById('interimSpan');
-                if (ispan) ispan.textContent = interimTranscript;
-                
                 requestAnimationFrame(() => {
-                    transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                    aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
                 });
             };
 
@@ -998,7 +1020,7 @@ ${chunk}
 
             try {
                 // 실시간 요약 정리 마지막 1회 가동
-                await processInterimSummary(true);
+                await triggerChunkPolishing(true);
 
                 // 텍스트 및 오디오 기반 고정밀 AI 분석
                 let success = false;
@@ -1444,11 +1466,7 @@ ${chunk}
                 document.getElementById('saveTranscriptTxtBtn').disabled = true;
                 document.getElementById('saveInterimSummaryBtn').disabled = true;
                 document.getElementById('saveFinalSummaryDocBtn').disabled = true;
-                transcriptDiv.innerHTML = '<p id="liveParagraph" class="text-slate-300 leading-relaxed inline"></p><span id="interimSpan" class="text-slate-500 italic ml-1"></span>';
-                aiTranscriptContainer.innerHTML = '<p class="text-slate-650 italic">강의 종료 후 고정밀 AI 분석이 실행되면 교정본이 이곳에 출력됩니다.</p>';
-                
-                // 원본 탭으로 자동 복원
-                tabRawTranscript.click();
+                aiTranscriptContainer.innerHTML = '<p class="text-slate-500 italic">녹음 중... 300단어가 수집되면 AI 교정 속기록이 실시간으로 출력됩니다.</p>';
                 
                 interimSummaryDiv.innerHTML = '<p class="text-slate-500 italic">실시간 문맥 분석 대기 중...</p>';
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-500 text-xs">강의를 녹음하는 중입니다...</div>';
@@ -1489,7 +1507,6 @@ ${chunk}
                     document.getElementById('recordBtnText').textContent = '녹음 중지';
                     
                     lucide.createIcons();
-                    summaryInterval = setInterval(processInterimSummary, 15000);
                 } catch (err) {
                     showError('음성 입력 개시 실패: ' + err.message);
                     isRecording = false;
@@ -1513,17 +1530,13 @@ ${chunk}
 
         document.getElementById('saveTranscriptTxtBtn').addEventListener('click', (e) => {
             e.preventDefault();
-            // 활성화된 탭에 따라 다운로드할 내용 결정
-            const isRawTab = !aiTranscriptContainer.classList.contains('hidden');
-            const contentToSave = isRawTab ? aiTranscript : fullTranscript;
-            const suffix = isRawTab ? 'AI교정본' : '실시간원본';
-            
+            const contentToSave = aiTranscript || fullTranscript;
             if (!contentToSave) return;
             const blob = new Blob([contentToSave], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${titleInput.value || '강의록'}_속기록(${suffix}).txt`;
+            a.download = `${titleInput.value || '강의록'}_속기록.txt`;
             a.click();
             URL.revokeObjectURL(url);
         });
@@ -1660,24 +1673,6 @@ ${chunk}
 
         // ── 자동 정보 로딩 및 연동 ─────────────────────────────────────────
         window.addEventListener('load', () => {
-            // Transcript Tabs switching logic
-            function switchTranscriptTab(tab) {
-                if (tab === 'raw') {
-                    tabRawTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20';
-                    tabAiTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent';
-                    transcriptDiv.classList.remove('hidden');
-                    aiTranscriptContainer.classList.add('hidden');
-                } else {
-                    tabAiTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20';
-                    tabRawTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent';
-                    aiTranscriptContainer.classList.remove('hidden');
-                    transcriptDiv.classList.add('hidden');
-                }
-            }
-
-            tabRawTranscript.addEventListener('click', () => switchTranscriptTab('raw'));
-            tabAiTranscript.addEventListener('click', () => switchTranscriptTab('ai'));
-
             const savedGeminiKey = localStorage.getItem('gemini_api_key');
             if (savedGeminiKey) {
                 apiKeyInput.value = savedGeminiKey;
