@@ -163,6 +163,19 @@
                     <input type="password" id="apiKey" class="bg-slate-950 border border-slate-850 text-slate-200 text-xs rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-2 font-mono transition-colors" placeholder="API Key 입력">
                 </div>
 
+                <!-- Gemini Model Selection Row -->
+                <div class="mb-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="modelSelect" class="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                            <i data-lucide="cpu" class="h-3.5 w-3.5 text-blue-400"></i> AI 모델 선택 (자동조회)
+                        </label>
+                        <button type="button" id="refreshModelsBtn" class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors hidden" title="모델 새로고침"><i data-lucide="refresh-cw" class="h-3 w-3"></i></button>
+                    </div>
+                    <select id="modelSelect" class="bg-slate-950 border border-slate-850 text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5 font-mono transition-colors">
+                        <option value="gemini-1.5-flash">API Key를 입력하면 최신 모델을 조회합니다...</option>
+                    </select>
+                </div>
+
                 <!-- Firebase Accordion Header -->
                 <div class="border-t border-slate-800/80 pt-2.5 flex items-center justify-between">
                     <span class="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
@@ -582,7 +595,7 @@
                 return null;
             }
 
-            const model = 'gemini-3.1-flash-lite-preview';
+            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
             const payload = {
                 systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -879,7 +892,7 @@ ${chunk}
                 return false;
             }
 
-            const model = 'gemini-3.1-flash-lite-preview';
+            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
             updateStatus('고정밀 텍스트 교정 및 요약 중...', 'processing');
@@ -1237,6 +1250,81 @@ ${chunk}
             apiKeyInput.addEventListener('input', () => {
                 localStorage.setItem('gemini_api_key', apiKeyInput.value.trim());
             });
+
+            // Dynamic Model Fetching Logic
+            const modelSelect = document.getElementById('modelSelect');
+            const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+
+            async function fetchAvailableModels() {
+                const key = apiKeyInput.value.trim();
+                if (!key) return;
+
+                modelSelect.innerHTML = '<option value="">API 통신망 조회 중...</option>';
+                refreshModelsBtn.classList.remove('hidden');
+                
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+                    if (!res.ok) throw new Error('API Key 무효 또는 통신 실패');
+                    const data = await res.json();
+                    
+                    const validModels = data.models.filter(m => 
+                        m.name.includes('gemini') && 
+                        m.supportedGenerationMethods.includes('generateContent')
+                    );
+
+                    if (validModels.length === 0) throw new Error('사용 가능한 모델이 없습니다.');
+
+                    modelSelect.innerHTML = '';
+                    
+                    // 정렬: 최신 모델이 위로 오도록 (version 기준 내림차순, 같은 버전이면 flash를 위로)
+                    validModels.sort((a, b) => {
+                        if (a.version !== b.version) return b.version.localeCompare(a.version);
+                        if (a.name.includes('flash') && !b.name.includes('flash')) return -1;
+                        if (!a.name.includes('flash') && b.name.includes('flash')) return 1;
+                        return 0;
+                    });
+
+                    let bestDefault = null;
+                    const savedModel = localStorage.getItem('gemini_api_model');
+
+                    validModels.forEach(m => {
+                        const option = document.createElement('option');
+                        const modelId = m.name.replace('models/', '');
+                        option.value = modelId;
+                        option.textContent = `${m.displayName} (${modelId})`;
+                        modelSelect.appendChild(option);
+
+                        // 우선순위 결정: 이전에 선택한 모델 > 가장 최신 flash 모델
+                        if (savedModel && savedModel === modelId) {
+                            bestDefault = modelId;
+                        } else if (!bestDefault && modelId.includes('flash')) {
+                            bestDefault = modelId;
+                        }
+                    });
+
+                    if (bestDefault) {
+                        modelSelect.value = bestDefault;
+                    } else if (validModels.length > 0) {
+                        modelSelect.value = validModels[0].name.replace('models/', '');
+                    }
+                } catch (err) {
+                    console.warn(err);
+                    modelSelect.innerHTML = '<option value="gemini-1.5-flash">조회 실패 (기본값 사용: gemini-1.5-flash)</option>';
+                } finally {
+                    lucide.createIcons();
+                }
+            }
+
+            apiKeyInput.addEventListener('blur', fetchAvailableModels);
+            refreshModelsBtn.addEventListener('click', fetchAvailableModels);
+            modelSelect.addEventListener('change', () => {
+                localStorage.setItem('gemini_api_model', modelSelect.value);
+            });
+            
+            // Initial fetch if key exists
+            if (apiKeyInput.value) {
+                fetchAvailableModels();
+            }
         });
     </script>
 </body>
