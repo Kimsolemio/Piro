@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 강의록 요약</title>
+    <title>AI 강의록 요약 대시보드</title>
 
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
@@ -19,24 +19,31 @@
     <style>
         body {
             font-family: 'Noto Sans KR', 'Inter', sans-serif;
-            background-color: #0f172a;
-            background-image: radial-gradient(ellipse 80% 80% at 50% -20%, rgba(56, 189, 248, 0.15), rgba(255, 255, 255, 0));
+            background-color: #0b1329;
+            background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59, 130, 246, 0.12), rgba(255, 255, 255, 0));
             min-height: 100vh;
+            overflow-x: hidden;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-        .pulse-live { animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
-            50% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
-        }
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.7);
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+        
+        /* Clean Premium Card Design */
+        .premium-card {
+            background: rgba(15, 23, 42, 0.65);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(51, 65, 85, 0.6);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            transition: all 0.25s ease;
         }
+        .premium-card:hover {
+            border-color: rgba(148, 163, 184, 0.22);
+            box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.6);
+        }
+
         .save-btn {
             position: relative;
             display: flex;
@@ -44,228 +51,348 @@
             justify-content: center;
             width: 32px;
             height: 32px;
-            background-color: #334155;
-            color: #cbd5e1;
-            border-radius: 9999px;
-            border: 1px solid #475569;
+            background-color: rgba(30, 41, 59, 0.4);
+            color: #94a3b8;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             transition: all 0.2s;
         }
-        .save-btn:hover:not(:disabled) { background-color: #475569; color: #ffffff; }
-        .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .save-btn:hover:not(:disabled) { 
+            background-color: rgba(59, 130, 246, 0.15); 
+            color: #ffffff;
+            border-color: rgba(59, 130, 246, 0.35);
+        }
+        .save-btn:disabled { opacity: 0.15; cursor: not-allowed; }
+        
         .tooltip {
             position: absolute;
             bottom: 125%;
             left: 50%;
             transform: translateX(-50%);
-            background-color: #0f172a;
+            background-color: #0b1329;
             color: #ffffff;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 4px 10px;
+            border-radius: 6px;
             font-size: 11px;
             white-space: nowrap;
             opacity: 0;
             pointer-events: none;
             transition: 0.2s;
-            border: 1px solid #334155;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             z-index: 10;
         }
         .group:hover .tooltip { opacity: 1; }
-        .premium-border { position: relative; }
-        .premium-border::before {
-            content: "";
-            position: absolute;
-            inset: -1px;
-            border-radius: inherit;
-            background: linear-gradient(to right, #3b82f6, #8b5cf6);
-            z-index: -1;
-            opacity: 0.3;
+        
+        .note-item {
+            background: rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.15s ease;
+        }
+        .note-item:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        .transcript-bubble {
+            animation: bubble-fade 0.3s ease-out forwards;
+            border-left: 2px solid rgba(59, 130, 246, 0.4);
+            background: rgba(30, 41, 59, 0.12);
+            padding: 10px 14px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.02);
+            border-right: 1px solid rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        }
+        @keyframes bubble-fade {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pulse-live {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
         }
     </style>
 </head>
-<body class="text-slate-200 antialiased">
-    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
-        <header class="text-center mb-10 mt-6">
-            <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent tracking-tight">
-                AI 강의록 요약
-                <span class="inline-block text-sm md:text-lg font-bold text-slate-400 align-top ml-2 border border-slate-500/40 bg-slate-500/10 px-3 py-1 rounded-md mb-2 md:mb-0 shadow-[0_0_15px_rgba(148,163,184,0.2)]">
-                    V8.1 FLASH-LITE
-                </span>
+<body class="text-slate-300 antialiased h-screen flex flex-col p-4">
+    
+    <!-- Top Compact Header & Status Indicators -->
+    <header class="flex items-center justify-between mb-4 px-2 shrink-0">
+        <div class="flex items-center gap-3">
+            <!-- Academic Logo -->
+            <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-800/80 px-3 py-1.5 rounded-xl shadow-sm">
+                <svg class="h-4.5 w-4.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                    <path d="M6 12v5c0 2 2.5 3 6 3s6-1 6-3v-5"/>
+                </svg>
+                <span class="text-xs font-semibold tracking-wider text-slate-300 uppercase">KNPU AI Campus</span>
+            </div>
+            <h1 class="text-lg font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                강의록 요약 대시보드
             </h1>
-            <p class="text-slate-400 mt-4 max-w-2xl mx-auto leading-relaxed">
-                <b>빠르고 정확한 AI 강의록 요약 도구입니다.</b> 실시간 녹취, 중간 요약, 최종 노트까지 한 번에 정리할 수 있습니다.
-            </p>
-        </header>
+        </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-10">
-            <div class="lg:col-span-1 flex flex-col gap-4">
-                <div class="glass-panel rounded-2xl p-5 flex flex-col h-[650px] shadow-xl">
-                    <h3 class="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-                        <i data-lucide="hard-drive" class="h-5 w-5 text-slate-400"></i> 시스템 상태
-                    </h3>
-                    <!-- Firebase 설정 입력 -->
-                    <div class="space-y-3 mb-4">
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">Project ID</label>
-                            <input type="text" id="fbProjectId" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-lg block w-full p-2" placeholder="your-project-id">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">API Key</label>
-                            <input type="password" id="fbApiKey" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-lg block w-full p-2" placeholder="AIza...">
-                        </div>
-                        <button id="fbConnectBtn" class="w-full bg-sky-600/80 hover:bg-sky-600 text-white text-xs font-semibold py-2 rounded-lg transition-all flex items-center justify-center gap-2">
-                            <i data-lucide="cloud" class="h-3.5 w-3.5"></i> Firebase 연결
-                        </button>
-                        <div id="fbStatus" class="text-center text-xs text-slate-500 flex items-center justify-center gap-1.5">
-                            <span id="fbDot" class="h-1.5 w-1.5 rounded-full bg-slate-600 inline-block"></span>
-                            <span id="fbStatusText">연결 안 됨</span>
-                        </div>
+        <!-- Badges -->
+        <div class="flex gap-2 text-[10px] font-medium">
+            <span id="badge-firebase" class="bg-slate-900/80 text-slate-500 border border-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-600"></span> DB 대기
+            </span>
+            <span id="badge-engine" class="bg-slate-900/80 text-slate-500 border border-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-600"></span> 마이크 비활성
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Workspace (Desktop Single Screen Layout) -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-grow min-h-0">
+        
+        <!-- Left Sidebar (Settings + History) -->
+        <div class="lg:col-span-1 flex flex-col gap-3 min-h-0 h-full">
+            
+            <!-- Credentials Config Card -->
+            <div class="premium-card rounded-2xl p-4 flex flex-col shrink-0 shadow-md">
+                
+                <!-- Gemini Key Row -->
+                <div class="mb-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="apiKey" class="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                            <i data-lucide="key" class="h-3.5 w-3.5 text-yellow-500"></i> Gemini AI API Key
+                        </label>
+                        <button type="button" id="toggleApiKey" class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">보기</button>
                     </div>
-                    <div class="border-t border-slate-700/50 pt-3 flex-grow flex flex-col min-h-0">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-slate-400">저장된 노트</span>
-                            <button id="fbRefreshBtn" class="text-slate-500 hover:text-slate-300 transition-colors">
-                                <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
-                            </button>
-                        </div>
-                        <div id="fbHistoryList" class="flex-grow overflow-y-auto custom-scrollbar space-y-2 text-xs text-slate-500 italic">
-                            Firebase 연결 후 불러옵니다.
-                        </div>
+                    <input type="password" id="apiKey" class="bg-slate-950 border border-slate-850 text-slate-200 text-xs rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-2 font-mono transition-colors" placeholder="API Key 입력">
+                </div>
+
+                <!-- Firebase Accordion Header -->
+                <div class="border-t border-slate-800/80 pt-2.5 flex items-center justify-between">
+                    <span class="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                        <i data-lucide="database" class="h-3.5 w-3.5 text-blue-400"></i> Firebase 데이터베이스
+                    </span>
+                    <button type="button" id="toggleFbInputs" class="text-slate-500 hover:text-slate-300 transition-colors">
+                        <i data-lucide="chevron-down" class="h-3.5 w-3.5" id="fbChevron"></i>
+                    </button>
+                </div>
+                
+                <!-- Firebase Inputs (Collapsible) -->
+                <div id="fbInputsWrapper" class="space-y-2 mt-2 bg-slate-950/50 p-3 rounded-lg border border-slate-900 transition-all duration-300 overflow-hidden" style="max-height: 0px; padding: 0px; border-width: 0px;">
+                    <div>
+                        <label class="block text-[9px] tracking-wider text-slate-500 mb-0.5 font-semibold">Project ID</label>
+                        <input type="text" id="fbProjectId" class="bg-slate-900 border border-slate-800 text-slate-300 text-[11px] rounded-md block w-full p-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="your-project-id">
                     </div>
+                    <div>
+                        <label class="block text-[9px] tracking-wider text-slate-500 mb-0.5 font-semibold">API Key</label>
+                        <input type="password" id="fbApiKey" class="bg-slate-900 border border-slate-800 text-slate-300 text-[11px] rounded-md block w-full p-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="AIzaSy...">
+                    </div>
+                    <button id="fbConnectBtn" class="w-full bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-semibold py-1.5 rounded-md border border-slate-700 transition-all flex items-center justify-center gap-1.5">
+                        <i data-lucide="link" class="h-3 w-3"></i> 연결 실행
+                    </button>
+                </div>
+
+                <div id="fbStatus" class="text-center text-[10px] text-slate-500 flex items-center justify-center gap-1 mt-2.5">
+                    <span id="fbDot" class="h-1.5 w-1.5 rounded-full bg-slate-600 inline-block"></span>
+                    <span id="fbStatusText">데이터베이스 연동 대기</span>
                 </div>
             </div>
 
-            <div class="lg:col-span-3 space-y-6">
-                <div class="grid grid-cols-1 gap-4">
-                    <div class="glass-panel p-5 rounded-xl shadow-lg premium-border">
-                        <label for="apiKey" class="block text-sm font-medium text-slate-300 mb-2 flex justify-between items-center">
-                            <span class="flex items-center gap-2"><i data-lucide="key" class="h-4 w-4 text-amber-400"></i> Gemini API 키</span>
-                            <span class="text-[10px] bg-slate-500/10 text-slate-400 px-2 py-0.5 rounded border border-slate-500/20 flex items-center gap-1">
-                                <i data-lucide="server" class="h-3 w-3"></i> Local
-                            </span>
-                        </label>
-                        <div class="relative">
-                            <input type="password" id="apiKey" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-2 focus:ring-sky-500 block w-full p-3 pr-10" placeholder="Gemini API 키를 입력하세요">
-                            <button type="button" id="toggleApiKey" class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white focus:outline-none">
-                                <span id="eyeIconWrapper"><i data-lucide="eye" class="h-5 w-5"></i></span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="grid md:grid-cols-2 gap-4">
-                        <div class="glass-panel p-5 rounded-xl shadow-lg">
-                            <label for="titleInput" class="block text-sm font-medium text-slate-400 mb-2">회의/강의 제목</label>
-                            <input type="text" id="titleInput" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-2 focus:ring-sky-500 block w-full p-3" placeholder="예: 프로젝트 기획 회의">
-                        </div>
-                        <div class="glass-panel p-5 rounded-xl shadow-lg">
-                            <label for="contextInput" class="block text-sm font-medium text-slate-400 mb-2">AI 가이드 (맥락 정보)</label>
-                            <input type="text" id="contextInput" class="bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-2 focus:ring-sky-500 block w-full p-3" placeholder="예: 주요 결정사항 위주로 정리">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex flex-col items-center justify-center py-6">
-                    <button type="button" id="recordBtn" class="bg-gradient-to-br from-sky-500 to-indigo-600 text-white font-bold h-24 w-24 rounded-full shadow-2xl hover:scale-105 transition-all flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-sky-500/50">
-                        <span id="micIconContainer"><i data-lucide="mic" class="h-10 w-10"></i></span>
+            <!-- Notes Archive Card (Scrollable) -->
+            <div class="premium-card rounded-2xl p-4 flex flex-col flex-grow min-h-0 shadow-md">
+                <div class="flex items-center justify-between mb-3 border-b border-slate-800/80 pb-2">
+                    <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="folder-open" class="h-4 w-4 text-blue-400"></i> 저장된 요약 노트
+                    </span>
+                    <button id="fbRefreshBtn" class="text-slate-500 hover:text-blue-400 transition-colors">
+                        <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
                     </button>
-                    <div id="status" class="mt-4 text-slate-400 flex items-center space-x-2 bg-slate-800/80 px-4 py-2 rounded-full border border-slate-700">
-                        <div id="status-indicator" class="h-2 w-2 rounded-full bg-slate-500 transition-colors duration-500"></div>
-                        <span id="status-text" class="font-medium text-xs">시스템 대기 중</span>
-                    </div>
                 </div>
+                <div id="fbHistoryList" class="flex-grow overflow-y-auto custom-scrollbar space-y-2 text-xs text-slate-500 italic pr-1">
+                    데이터베이스를 연결하여 과거 이력을 불러오십시오.
+                </div>
+            </div>
+        </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="glass-panel rounded-2xl flex flex-col h-[400px] overflow-hidden">
-                        <div class="p-4 border-b border-slate-700/50 bg-slate-900/40 flex justify-between items-center">
-                            <h2 class="text-sm font-semibold text-white flex items-center gap-2">
-                                <i data-lucide="mic-2" class="h-4 w-4 text-sky-400"></i> 실시간 녹취
+        <!-- Right Side Panel (Workspace) -->
+        <div class="lg:col-span-3 flex flex-col gap-4 min-h-0 h-full">
+            
+            <!-- Top Compact Control Bar -->
+            <div class="premium-card p-3 rounded-2xl shadow-md shrink-0">
+                <div class="flex flex-col md:flex-row items-center gap-3">
+                    
+                    <!-- Title Input -->
+                    <div class="flex-grow w-full md:w-auto">
+                        <input type="text" id="titleInput" class="bg-slate-950/85 border border-slate-850 text-slate-200 text-xs rounded-xl focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 transition-all placeholder-slate-600 font-medium" placeholder="강의 및 회의 제목 입력">
+                    </div>
+
+                    <!-- Context/Guide Input -->
+                    <div class="flex-grow w-full md:w-auto">
+                        <input type="text" id="contextInput" class="bg-slate-950/85 border border-slate-850 text-slate-200 text-xs rounded-xl focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 transition-all placeholder-slate-600" placeholder="요약 가이드 지침 (예: 주요 정책 대책 위주 요약)">
+                    </div>
+
+                    <!-- Compact Record Button -->
+                    <button type="button" id="recordBtn" class="bg-red-600/90 hover:bg-red-600 text-white font-semibold px-5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md h-[38px] min-w-[125px] shrink-0 text-xs">
+                        <span id="micIconContainer" class="relative flex items-center justify-center">
+                            <i data-lucide="mic" class="h-4 w-4"></i>
+                        </span>
+                        <span id="recordBtnText">녹음 시작</span>
+                    </button>
+                    
+                    <!-- Dynamic state bar hidden but updated dynamically -->
+                    <div id="status" class="hidden"><span id="status-indicator"></span><span id="status-text"></span></div>
+                </div>
+            </div>
+
+            <!-- Workspace Panels Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow min-h-0 h-full">
+                
+                <!-- Left Column (Live Transcript & Live AI Summary) -->
+                <div class="flex flex-col gap-4 min-h-0 h-full">
+                    
+                    <!-- Live Transcript -->
+                    <div class="premium-card rounded-2xl flex flex-col flex-1 min-h-0 shadow-md">
+                        <div class="px-4 py-2.5 border-b border-slate-850/60 bg-slate-900/35 flex justify-between items-center shrink-0">
+                            <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                                <i data-lucide="mic" class="h-4 w-4 text-blue-400"></i> 실시간 강의 속기록
                             </h2>
                             <button type="button" id="saveTranscriptTxtBtn" disabled class="save-btn group">
                                 <i data-lucide="download" class="h-3.5 w-3.5"></i>
-                                <span class="tooltip">TXT 저장</span>
+                                <span class="tooltip">TXT 다운로드</span>
                             </button>
                         </div>
-                        <div id="transcript" class="p-5 overflow-y-auto custom-scrollbar flex-grow text-sm leading-relaxed text-slate-300">
-                            <p class="text-slate-600 italic">마이크 권한을 허용하고 녹음을 시작하세요.</p>
+                        <div id="transcript" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
+                            <p class="text-slate-600 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>
                         </div>
                     </div>
 
-                    <div class="glass-panel rounded-2xl flex flex-col h-[400px] overflow-hidden">
-                        <div class="p-4 border-b border-slate-700/50 bg-slate-900/40 flex justify-between items-center">
-                            <h2 class="text-sm font-semibold text-white flex items-center gap-2">
-                                <i data-lucide="sparkles" class="h-4 w-4 text-amber-400"></i> 실시간 요약
+                    <!-- Real-time AI Summary -->
+                    <div class="premium-card rounded-2xl flex flex-col flex-1 min-h-0 shadow-md">
+                        <div class="px-4 py-2.5 border-b border-slate-850/60 bg-slate-900/35 flex justify-between items-center shrink-0">
+                            <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                                <i data-lucide="sparkles" class="h-4 w-4 text-yellow-500"></i> 실시간 AI 요약 노트
                             </h2>
-                            <div class="flex items-center gap-2">
-                                <div id="interimSummaryLoader" class="hidden"><i data-lucide="loader-circle" class="h-4 w-4 animate-spin text-amber-400"></i></div>
+                            <div class="flex items-center gap-1.5">
+                                <div id="interimSummaryLoader" class="hidden"><i data-lucide="loader-circle" class="h-3.5 w-3.5 animate-spin text-yellow-400"></i></div>
                                 <button type="button" id="saveInterimSummaryBtn" disabled class="save-btn group">
-                                    <i data-lucide="download" class="h-3.5 w-3.5"></i>
-                                    <span class="tooltip">MD 저장</span>
+                                    <i data-lucide="file-text" class="h-3.5 w-3.5"></i>
+                                    <span class="tooltip">MD 다운로드</span>
                                 </button>
                             </div>
                         </div>
-                        <div id="interimSummary" class="p-5 overflow-y-auto custom-scrollbar flex-grow text-sm leading-relaxed text-slate-300">
-                            <p class="text-slate-600 italic">자동 요약 대기 중...</p>
+                        <div id="interimSummary" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
+                            <p class="text-slate-600 italic">실시간 분석 대기 중...</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="glass-panel rounded-2xl flex flex-col min-h-[400px] shadow-2xl border-t border-sky-500/20">
-                    <div class="p-5 border-b border-slate-700/50 bg-slate-900/60 flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-white flex items-center gap-2">
-                            <i data-lucide="book-open-check" class="h-5 w-5 text-purple-400"></i> 최종 정리 노트
+                <!-- Right Column (Final Report) -->
+                <div class="premium-card rounded-2xl flex flex-col min-h-0 h-full shadow-md">
+                    <div class="px-4 py-2.5 border-b border-slate-850/60 bg-slate-900/35 flex justify-between items-center shrink-0">
+                        <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i data-lucide="book-marked" class="h-4.5 w-4.5 text-blue-400"></i> 최종 정리 보고서
                         </h2>
-                        <button type="button" id="saveFinalSummaryDocBtn" disabled class="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                            <i data-lucide="file-text" class="h-4 w-4"></i> .docx 다운로드
+                        <button type="button" id="saveFinalSummaryDocBtn" disabled class="bg-blue-600/80 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 shadow disabled:opacity-15 disabled:cursor-not-allowed">
+                            <i data-lucide="download" class="h-3.5 w-3.5"></i> .docx 다운로드
                         </button>
                     </div>
-                    <div id="finalSummary" class="p-8 prose prose-invert prose-slate max-w-none">
-                        <div class="text-center py-20 text-slate-600">녹음 종료 후 전체 내용을 분석하여 완벽한 노트가 생성됩니다.</div>
+                    <div class="p-5 overflow-y-auto custom-scrollbar flex-grow min-h-0">
+                        <div id="finalSummary" class="prose prose-invert prose-xs max-w-none">
+                            <div class="text-center py-20 text-slate-600 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div id="error-message" class="fixed bottom-6 right-6 bg-rose-900/95 backdrop-blur-md text-white py-4 px-5 rounded-xl shadow-2xl z-50 flex items-start gap-3 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none border border-rose-500/30">
-            <i data-lucide="alert-triangle" class="h-5 w-5 text-rose-300"></i>
-            <span id="error-text" class="text-sm font-medium"></span>
-        </div>
+    <!-- Toast Notification -->
+    <div id="error-message" class="fixed bottom-6 right-6 bg-slate-950/95 backdrop-blur-md text-white py-4 px-5 rounded-xl shadow-lg z-50 flex items-start gap-3 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none border border-slate-800">
+        <i data-lucide="alert-circle" class="h-5 w-5 text-red-500"></i>
+        <span id="error-text" class="text-sm font-medium"></span>
     </div>
 
     <script>
         lucide.createIcons();
 
-        // ── Firebase 연결 ───────────────────────────────────────────────────
+        // ────────────────────────────────────────────────────────────────
+        // [FIREBASE DEFAULT CONFIGURATION]
+        // 아래 객체에 Firebase Project ID와 API Key를 미리 적어 두면,
+        // 사용자가 화면에서 정보를 입력할 필요 없이 데이터베이스가 즉시 자동 연결됩니다.
+        // ────────────────────────────────────────────────────────────────
+        const DEFAULT_FIREBASE_CONFIG = {
+            projectId: "", // 여기에 Firebase Project ID 기입 가능
+            apiKey: ""     // 여기에 Firebase API Key 기입 가능
+        };
+
+        // Left sidebar accordion toggle
+        const toggleFbInputsBtn = document.getElementById('toggleFbInputs');
+        const fbInputsWrapper = document.getElementById('fbInputsWrapper');
+        const fbChevron = document.getElementById('fbChevron');
+        let fbCollapsed = true; // default collapsed in SaaS sidebar
+
+        toggleFbInputsBtn.addEventListener('click', () => {
+            fbCollapsed = !fbCollapsed;
+            if (fbCollapsed) {
+                fbInputsWrapper.style.maxHeight = '0px';
+                fbInputsWrapper.style.padding = '0px';
+                fbInputsWrapper.style.borderWidth = '0px';
+                fbChevron.setAttribute('data-lucide', 'chevron-down');
+            } else {
+                fbInputsWrapper.style.maxHeight = '500px';
+                fbInputsWrapper.style.padding = '0.75rem';
+                fbInputsWrapper.style.borderWidth = '1px';
+                fbChevron.setAttribute('data-lucide', 'chevron-up');
+            }
+            lucide.createIcons();
+        });
+
+        // ── Firebase status updates ─────────────────────────────────────────
         function updateFbStatus(connected, msg) {
-            document.getElementById('fbDot').className =
-                'h-1.5 w-1.5 rounded-full inline-block ' +
-                (connected ? 'bg-emerald-400' : 'bg-slate-600');
+            const fbDot = document.getElementById('fbDot');
+            const fbBadge = document.getElementById('badge-firebase');
+            
+            fbDot.className = 'h-1.5 w-1.5 rounded-full inline-block ' + (connected ? 'bg-emerald-500' : 'bg-slate-600');
             document.getElementById('fbStatusText').textContent = msg;
+
+            if (connected) {
+                fbBadge.className = 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm';
+                fbBadge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span> DB 연결됨';
+            } else {
+                fbBadge.className = 'bg-slate-900/80 text-slate-500 border border-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm';
+                fbBadge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-slate-600"></span> DB 대기';
+            }
+            lucide.createIcons();
         }
 
         async function loadHistory() {
             if (!fbDb) return;
             const list = document.getElementById('fbHistoryList');
-            list.innerHTML = '<span class="text-slate-600">불러오는 중...</span>';
+            list.innerHTML = '<span class="text-slate-500 text-[10px]">노트를 동기화하는 중...</span>';
             try {
                 const snap = await fbDb.collection('lectures')
                     .orderBy('createdAt', 'desc').limit(20).get();
                 if (snap.empty) {
-                    list.innerHTML = '<span class="text-slate-600 italic">저장된 노트가 없습니다.</span>';
+                    list.innerHTML = '<span class="text-slate-650 italic">저장된 강의 요약본이 존재하지 않습니다.</span>';
                     return;
                 }
                 list.innerHTML = '';
                 snap.forEach(doc => {
                     const d = doc.data();
                     const item = document.createElement('div');
-                    item.className = 'bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/50 cursor-pointer hover:border-sky-500/40 transition-colors';
+                    item.className = 'note-item rounded-xl p-2.5 cursor-pointer';
                     const dt = d.createdAt?.toDate?.() ?? new Date();
                     item.innerHTML = `
-                        <div class="font-semibold text-slate-300 truncate">${d.title || '(제목 없음)'}</div>
-                        <div class="text-slate-500 mt-0.5">${dt.toLocaleString('ko-KR')}</div>`;
+                        <div class="font-bold text-slate-300 truncate flex items-center gap-1.5">
+                            <i data-lucide="file-text" class="h-3.5 w-3.5 text-slate-400"></i>
+                            ${d.title || '(제목 미정)'}
+                        </div>
+                        <div class="text-slate-500 text-[9px] mt-1.5 flex items-center justify-between">
+                            <span>${dt.toLocaleString('ko-KR')}</span>
+                            <span class="text-blue-400 font-semibold">보관 완료</span>
+                        </div>`;
                     item.addEventListener('click', () => loadNoteIntoView(doc.id, d));
                     list.appendChild(item);
                 });
+                lucide.createIcons();
             } catch (e) {
-                list.innerHTML = '<span class="text-rose-400">불러오기 실패: ' + e.message + '</span>';
+                list.innerHTML = '<span class="text-red-400">동기화 실패: ' + e.message + '</span>';
             }
         }
 
@@ -276,10 +403,15 @@
             titleInput.value = data.title || '';
 
             if (fullTranscript) {
-                transcriptDiv.innerHTML = fullTranscript.split('\n')
+                transcriptDiv.innerHTML = '';
+                fullTranscript.split('\n')
                     .filter(l => l.trim())
-                    .map(l => `<p class="mb-3 border-l-2 border-sky-500/50 pl-3 text-slate-400">${l}</p>`)
-                    .join('');
+                    .forEach(l => {
+                        const bubble = document.createElement('div');
+                        bubble.className = 'transcript-bubble text-slate-300';
+                        bubble.textContent = l;
+                        transcriptDiv.appendChild(bubble);
+                    });
             }
             if (finalSummaryRawMarkdown) {
                 finalSummaryDiv.innerHTML = marked.parse(finalSummaryRawMarkdown);
@@ -290,19 +422,47 @@
                 interimSummaryDiv.innerHTML = '';
                 summaryHistory.forEach(s => {
                     const block = document.createElement('div');
-                    block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs max-w-none';
+                    block.className = 'p-3 bg-slate-900/60 rounded-xl border border-slate-800/60 mb-3 prose prose-invert prose-xs max-w-none';
                     block.innerHTML = marked.parse(s);
                     interimSummaryDiv.appendChild(block);
                 });
                 document.getElementById('saveInterimSummaryBtn').disabled = false;
             }
-            showToast('노트를 불러왔습니다.', 'success');
+            showToast('데이터베이스에서 노트를 성공적으로 로드했습니다.', 'success');
+        }
+
+        async function connectFirebase(projectId, apiKey, isSilent = false) {
+            try {
+                if (fbApp) { firebase.app().delete(); fbApp = null; fbDb = null; }
+                fbApp = firebase.initializeApp({
+                    apiKey,
+                    projectId,
+                    authDomain: `${projectId}.firebaseapp.com`
+                });
+                fbDb = fbApp.firestore();
+                
+                // Save to localStorage
+                localStorage.setItem('fb_project_id', projectId);
+                localStorage.setItem('fb_api_key', apiKey);
+                
+                updateFbStatus(true, '연결 완료 · ' + projectId);
+                await loadHistory();
+                
+                if (!isSilent) {
+                    showToast('데이터베이스 연결 및 설정을 완료했습니다.', 'success');
+                }
+            } catch (e) {
+                updateFbStatus(false, '연결 실패');
+                if (!isSilent) {
+                    showError('연결 인증 초기화 오류: ' + e.message);
+                }
+            }
         }
 
         async function saveToFirebase(isUpdate) {
             if (!fbDb) return;
             const payload = {
-                title: titleInput.value || '(제목 없음)',
+                title: titleInput.value || '(제목 미정)',
                 transcript: fullTranscript,
                 summaryHistory: summaryHistory,
                 finalSummary: finalSummaryRawMarkdown,
@@ -316,50 +476,40 @@
                     const ref = await fbDb.collection('lectures').add(payload);
                     currentDocId = ref.id;
                 }
-                showToast('Firebase에 저장되었습니다.', 'success');
+                showToast('데이터베이스에 저장 완료되었습니다.', 'success');
                 loadHistory();
             } catch (e) {
-                showError('Firebase 저장 실패: ' + e.message);
+                showError('저장 실패: ' + e.message);
             }
         }
 
         document.getElementById('fbConnectBtn').addEventListener('click', () => {
             const projectId = document.getElementById('fbProjectId').value.trim();
             const apiKey    = document.getElementById('fbApiKey').value.trim();
-            if (!projectId || !apiKey) { showError('Project ID와 API Key를 모두 입력하세요.'); return; }
-
-            try {
-                if (fbApp) { firebase.app().delete(); fbApp = null; fbDb = null; }
-                fbApp = firebase.initializeApp({
-                    apiKey,
-                    projectId,
-                    authDomain: `${projectId}.firebaseapp.com`
-                });
-                fbDb = fbApp.firestore();
-                updateFbStatus(true, '연결됨 · ' + projectId);
-                lucide.createIcons();
-                loadHistory();
-            } catch (e) {
-                updateFbStatus(false, '연결 실패');
-                showError('Firebase 초기화 오류: ' + e.message);
-            }
+            if (!projectId || !apiKey) { showError('Project ID와 API Key를 모두 기입해 주십시오.'); return; }
+            connectFirebase(projectId, apiKey, false);
         });
 
         document.getElementById('fbRefreshBtn').addEventListener('click', () => {
-            if (!fbDb) { showError('Firebase가 연결되지 않았습니다.'); return; }
+            if (!fbDb) { showError('데이터베이스가 연결되지 않았습니다.'); return; }
             loadHistory();
         });
 
-        // 성공 토스트 (기존 에러 토스트 재사용 + 색상 전환)
         function showToast(message, type) {
             if (type === 'success') {
                 errorText.textContent = message;
-                errorToast.classList.remove('bg-rose-900/95', 'border-rose-500/30', 'translate-y-20', 'opacity-0', 'pointer-events-none');
-                errorToast.classList.add('bg-emerald-900/95', 'border-emerald-500/30');
+                errorToast.classList.remove('bg-slate-950/95', 'border-slate-800', 'translate-y-20', 'opacity-0', 'pointer-events-none');
+                errorToast.classList.add('bg-emerald-950/95', 'border-emerald-800/60');
+                errorToast.querySelector('i').setAttribute('data-lucide', 'check-circle-2');
+                errorToast.querySelector('i').className = 'h-5 w-5 text-emerald-400';
+                lucide.createIcons();
                 setTimeout(() => {
                     errorToast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
-                    errorToast.classList.remove('bg-emerald-900/95', 'border-emerald-500/30');
-                    errorToast.classList.add('bg-rose-900/95', 'border-rose-500/30');
+                    errorToast.classList.remove('bg-emerald-950/95', 'border-emerald-800/60');
+                    errorToast.classList.add('bg-slate-950/95', 'border-slate-800');
+                    errorToast.querySelector('i').setAttribute('data-lucide', 'alert-circle');
+                    errorToast.querySelector('i').className = 'h-5 w-5 text-red-500';
+                    lucide.createIcons();
                 }, 3000);
             } else {
                 showError(message);
@@ -377,7 +527,7 @@
         let summaryHistory = [];
         let finalSummaryRawMarkdown = '';
 
-        // Firebase
+        // Firebase State
         let fbApp = null;
         let fbDb  = null;
         let currentDocId = null;
@@ -405,17 +555,28 @@
 
         function updateStatus(text, state) {
             statusText.textContent = text;
-            statusIndicator.className = 'h-2 w-2 rounded-full ' + (
-                state === 'recording' ? 'bg-rose-500 shadow-lg' :
-                state === 'processing' ? 'bg-amber-400 animate-pulse' :
-                'bg-slate-500'
-            );
+            const badge = document.getElementById('badge-engine');
+            
+            if (state === 'recording') {
+                statusIndicator.className = 'h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]';
+                badge.className = 'bg-red-950/80 text-red-400 border border-red-800/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm';
+                badge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span> 녹음 중';
+            } else if (state === 'processing') {
+                statusIndicator.className = 'h-2 w-2 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.7)] animate-pulse';
+                badge.className = 'bg-yellow-950/80 text-yellow-400 border border-yellow-800/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm';
+                badge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-yellow-400 animate-spin"></span> AI 분석 중';
+            } else {
+                statusIndicator.className = 'h-2 w-2 rounded-full bg-slate-500';
+                badge.className = 'bg-slate-900/80 text-slate-500 border border-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm';
+                badge.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-slate-600"></span> 마이크 비활성';
+            }
+            lucide.createIcons();
         }
 
         async function callGeminiAPI(systemPrompt, userText) {
             const currentKey = apiKeyInput.value.trim();
             if (!currentKey) {
-                showError('API 키를 입력해주세요.');
+                showError('Gemini API Key를 입력해주십시오.');
                 return null;
             }
 
@@ -456,8 +617,8 @@
                 }
             }
 
-            console.error('AI 통신 오류:', lastErrorMsg);
-            showError('AI 통신 오류: ' + lastErrorMsg);
+            console.error('AI 분석망 통신 오류:', lastErrorMsg);
+            showError('AI 분석망 통신 오류: ' + lastErrorMsg);
             return null;
         }
 
@@ -471,21 +632,21 @@
             document.getElementById('interimSummaryLoader').classList.remove('hidden');
 
             const prompt = `
-당신은 실시간 STT 녹취록을 학습용 노트로 구조화하는 전문 에디터입니다.
+당신은 실시간 강좌 녹취록 및 학술 세미나 노트를 효율적으로 구조화하고 실시간 요약하는 전문 교육 에디터입니다.
 제공되는 입력 데이터는 실시간 음성 인식 결과물이므로 오탈자가 있거나 문장의 앞뒤가 끊겨 불완전할 수 있습니다. 
 
 다음 규칙을 반드시 준수하여 요약본을 작성하세요:
-1. 문맥상 무의미한 추임새(아, 어, 음, 그 등)는 생략하고 비문은 매끄럽게 교정하세요.
-2. 문장이 중간에 잘린 것처럼 보이더라도 입력된 사실 범위 내에서만 핵심을 도출하세요. 절대로 없는 사실을 상상해서 채워 넣지 마세요(환각 현상 엄금).
-3. 핵심 개념, 수치, 고유명사는 마크다운(**굵게**) 기법으로 시각적 강조를 적용하세요.
+1. 문맥상 무의미한 추임새(아, 어, 음, 그 등)는 생략하고 비문은 매끄러운 학술적 요약 어조로 교정하세요.
+2. 입력된 사실 범위 내에서만 핵심을 도출하세요. 절대로 없는 사실을 상상해서 채워 넣지 마세요(환각 현상 엄금).
+3. 핵심 개념, 이론, 통계 수치는 마크다운 (**굵게**) 기법으로 시각적 강조를 적용하세요.
 4. 결과물은 인사말이나 부연 설명 없이, 오직 아래 명시된 마크다운 불렛포인트 형식으로만 출력하세요.
 
 [출력 서식]
-- **주요 키워드 및 개념**
-  - 해당 키워드에 대한 상세 설명 및 핵심 사실 정리
-  - 언급된 구체적인 데이터나 수치 기록`;
+- **핵심 아젠다 및 기술 요약**
+  - 분석 내용 및 주요 논의 사실 정리
+  - 회의/강의에서 언급된 실질 수치나 대책`;
 
-    const userText = `[맥락 정보]
+            const userText = `[맥락 정보]
 - 강의/회의 제목: ${titleInput.value || '미정'}
 
 [실시간 입력 데이터]
@@ -498,7 +659,7 @@ ${chunk}
                 lastProcessedLength = fullTranscript.length;
                 summaryHistory.push(result);
                 const block = document.createElement('div');
-                block.className = 'p-4 bg-slate-800/50 rounded-xl border border-slate-700 mb-4 prose prose-invert prose-xs max-w-none';
+                block.className = 'p-3 bg-slate-900/60 rounded-xl border border-slate-800/60 mb-3 prose prose-invert prose-xs max-w-none';
                 block.innerHTML = marked.parse(result);
 
                 if (interimSummaryDiv.querySelector('p.italic')) interimSummaryDiv.innerHTML = '';
@@ -514,40 +675,40 @@ ${chunk}
 
         async function generateFinalSummary() {
             if (fullTranscript.trim().length === 0) {
-                updateStatus('대기 중', 'idle');
+                updateStatus('AI 대기 중', 'idle');
                 return;
             }
 
-            updateStatus('최종 분석 중...', 'processing');
+            updateStatus('최종 요약 분석 중...', 'processing');
 
             const prompt = `[System]
-당신은 최고 수준의 비즈니스 분석가이자 교육 콘텐츠 에디터입니다.
+당신은 최고 수준의 교육 콘텐츠 에디터이자 전문 요약 전문가입니다.
 
 [Task]
-제공된 전체 녹취록과 가이드를 바탕으로 전문적인 최종 마크다운 문서를 작성하세요.
+제공된 전체 녹취록과 가이드 지침을 바탕으로 깔끔하고 격식 있는 마크다운 요약 강의 노트를 작성하세요.
 
 [Rules]
-1. 가이드를 우선 반영
-2. 원본에 없는 내용은 작성 금지
-3. 아래 형식을 반드시 준수
+1. 가이드 지침을 성실히 반영
+2. 원본 기록에 없는 정보 지어내지 말 것 (사실에 기반)
+3. 아래 강의 노트 양식을 엄수
 
 [Output Format]
-# ${titleInput.value || '미정'}
-> **한 줄 요약:** 전체 핵심 요약
+# ${titleInput.value || '강의 및 회의 기록'}
+> **핵심 요약:** 본 문서는 강좌 및 회의 내용을 AI 기반으로 자동 요약 정리한 노트입니다.
 
-## 1. 개요
-- **배경 및 목적:**
-- **핵심 주제:**
+## 1. 개요 및 취지
+- **기록 목적 및 배경:**
+- **주요 핵심 주제:**
 
-## 2. 주요 내용
-- **핵심 키워드 1**
-  - 상세 내용
-- **핵심 키워드 2**
-  - 상세 내용
+## 2. 주요 핵심 내용
+- **주요 키워드 1**
+  - 상세 설명 및 중요 요지
+- **주요 키워드 2**
+  - 상세 설명 및 중요 요지
 
 [Input]
-- 가이드: ${contextInput.value}
-- 전체 녹취록: ${fullTranscript}`;
+- 가이드 지침: ${contextInput.value}
+- 전체 녹취록 기록: ${fullTranscript}`;
 
             const result = await callGeminiAPI(prompt, fullTranscript);
 
@@ -555,8 +716,7 @@ ${chunk}
                 finalSummaryRawMarkdown = result;
                 finalSummaryDiv.innerHTML = marked.parse(result);
                 document.getElementById('saveFinalSummaryDocBtn').disabled = false;
-                updateStatus('분석 완료', 'idle');
-                // 최종 노트 완성 시 Firebase 자동 저장
+                updateStatus('분석 요약 완료', 'idle');
                 if (fbDb) saveToFirebase(!!currentDocId);
             } else {
                 updateStatus('분석 실패', 'idle');
@@ -565,70 +725,70 @@ ${chunk}
 
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-if (window.SpeechRecognition) {
-    recognition = new window.SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true; // 실시간 텍스트 변화 감지
-    recognition.lang = 'ko-KR';
+        if (window.SpeechRecognition) {
+            recognition = new window.SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true; 
+            recognition.lang = 'ko-KR';
 
-    recognition.onstart = () => {
-        isRecognizing = true;
-        updateStatus('녹음 중...', 'recording');
-    };
+            recognition.onstart = () => {
+                isRecognizing = true;
+                updateStatus('오디오 기록 중', 'recording');
+            };
 
-    recognition.onresult = (event) => {
-        let finalChunk = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                finalChunk += event.results[i][0].transcript + ' ';
-            }
-        }
-        
-        if (finalChunk) {
-            fullTranscript += finalChunk;
-            if (transcriptDiv.querySelector('p.italic')) transcriptDiv.innerHTML = '';
-            
-            // 가독성을 위해 문장 단위로 깔끔하게 한 줄씩 추가
-            transcriptDiv.innerHTML += `<p class="mb-3 border-l-2 border-sky-500 pl-3 text-slate-300">${finalChunk.trim()}</p>`;
-            
-            // 브라우저 렌더링 타이밍을 고려한 부드러운 스크롤 포커스
-            requestAnimationFrame(() => {
-                transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
-            });
-            
-            document.getElementById('saveTranscriptTxtBtn').disabled = false;
-        }
-    };
-
-    recognition.onerror = (e) => {
-        console.warn('Speech Recognition Error:', e.error);
-        
-        if (e.error === 'not-allowed') {
-            showError('마이크 권한이 거부되었습니다. 브라우저 권한 설정을 확인해주세요.');
-            stopRecordingAndAnalyze();
-        } else if (e.error === 'network') {
-            showError('네트워크 연결이 일시적으로 불안정합니다. STT를 재연결합니다.');
-        }
-        // 'aborted' 나 'no-speech' 에러는 onend에서 자연스럽게 재시작되므로 별도 차단하지 않음
-    };
-
-    recognition.onend = () => {
-        isRecognizing = false;
-        
-        // 사용자가 명시적으로 중단한 게 아니라면 (녹음 중 상태 유지 시) 안전하게 재시작
-        if (isRecording) {
-            setTimeout(() => {
-                if (isRecording && !isRecognizing) {
-                    try { 
-                        recognition.start(); 
-                    } catch (err) {
-                        console.error('STT 재시작 실패:', err);
+            recognition.onresult = (event) => {
+                let finalChunk = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalChunk += event.results[i][0].transcript + ' ';
                     }
                 }
-            }, 400); // 0.4초의 안전 딜레이를 주어 브라우저 과부하 방지
+                
+                if (finalChunk) {
+                    fullTranscript += finalChunk;
+                    if (transcriptDiv.querySelector('p.italic')) transcriptDiv.innerHTML = '';
+                    
+                    const bubble = document.createElement('div');
+                    bubble.className = 'transcript-bubble text-slate-300';
+                    bubble.textContent = finalChunk.trim();
+                    transcriptDiv.appendChild(bubble);
+                    
+                    requestAnimationFrame(() => {
+                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                    });
+                    
+                    document.getElementById('saveTranscriptTxtBtn').disabled = false;
+                }
+            };
+
+            recognition.onerror = (e) => {
+                console.warn('Speech Recognition Error:', e.error);
+                
+                if (e.error === 'not-allowed') {
+                    showError('마이크 권한이 거부되었습니다. 마이크 입력을 허용해 주십시오.');
+                    stopRecordingAndAnalyze();
+                } else if (e.error === 'network') {
+                    showError('네트워크 연결이 불안정합니다. 음성 입력을 재시도합니다.');
+                }
+            };
+
+            recognition.onend = () => {
+                isRecognizing = false;
+                
+                if (isRecording) {
+                    setTimeout(() => {
+                        if (isRecording && !isRecognizing) {
+                            try { 
+                                recognition.start(); 
+                            } catch (err) {
+                                console.error('음성 스냅샷 재시작 실패:', err);
+                            }
+                        }
+                    }, 400); 
+                }
+            };
         }
-    };
-}
+
         async function stopRecordingAndAnalyze() {
             isRecording = false;
 
@@ -639,22 +799,28 @@ if (window.SpeechRecognition) {
 
             if (fullTranscript.trim().length === 0) {
                 isProcessing = false;
-                updateStatus('대기 중', 'idle');
-                micIconContainer.innerHTML = '<i data-lucide="mic" class="h-10 w-10"></i>';
-                recordBtn.classList.remove('pulse-live', 'bg-rose-600', 'bg-slate-700', 'cursor-not-allowed', 'opacity-80');
-                recordBtn.classList.add('bg-gradient-to-br', 'from-sky-500', 'to-indigo-600', 'hover:scale-105');
-                transcriptDiv.innerHTML = '<p class="text-slate-600 italic">마이크 권한을 허용하고 녹음을 시작하세요.</p>';
-                interimSummaryDiv.innerHTML = '<p class="text-slate-600 italic">자동 요약 대기 중...</p>';
-                finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-600">녹음 종료 후 전체 내용을 분석하여 완벽한 노트가 생성됩니다.</div>';
+                updateStatus('AI 대기 중', 'idle');
+                
+                // Reset Button
+                recordBtn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'border', 'border-red-500/40', 'pulse-live', 'opacity-75', 'cursor-not-allowed');
+                recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
+                micIconContainer.innerHTML = '<i data-lucide="mic" class="h-4 w-4"></i>';
+                document.getElementById('recordBtnText').textContent = '녹음 시작';
+
+                transcriptDiv.innerHTML = '<p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>';
+                interimSummaryDiv.innerHTML = '<p class="text-slate-650 italic">실시간 분석 대기 중...</p>';
+                finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-650 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>';
                 lucide.createIcons();
                 return;
             }
 
             isProcessing = true;
-            updateStatus('AI 분석 중...', 'processing');
-            micIconContainer.innerHTML = '<i data-lucide="loader-circle" class="h-10 w-10 animate-spin"></i>';
-            recordBtn.classList.remove('pulse-live', 'bg-rose-600', 'hover:scale-105');
-            recordBtn.classList.add('bg-slate-700', 'cursor-not-allowed', 'opacity-80');
+            updateStatus('최종 분석 요약 중...', 'processing');
+            
+            // Show Loading inside button
+            micIconContainer.innerHTML = '<i data-lucide="loader-circle" class="h-4 w-4 animate-spin"></i>';
+            document.getElementById('recordBtnText').textContent = '요약 분석 중...';
+            recordBtn.classList.add('opacity-75', 'cursor-not-allowed');
             lucide.createIcons();
 
             try {
@@ -662,14 +828,16 @@ if (window.SpeechRecognition) {
                 await generateFinalSummary();
             } catch (err) {
                 console.error(err);
-                showError('분석 중 오류가 발생했습니다.');
+                showError('노트 분석 요약 도중 오류가 발생했습니다.');
             } finally {
                 isProcessing = false;
-                micIconContainer.innerHTML = '<i data-lucide="mic" class="h-10 w-10"></i>';
-                recordBtn.classList.remove('bg-slate-700', 'cursor-not-allowed', 'opacity-80');
-                recordBtn.classList.add('bg-gradient-to-br', 'from-sky-500', 'to-indigo-600', 'hover:scale-105');
-                if (statusText.textContent.includes('분석 중') || statusText.textContent.includes('처리 중')) {
-                    updateStatus('대기 중', 'idle');
+                recordBtn.classList.remove('opacity-75', 'cursor-not-allowed', 'bg-slate-800', 'hover:bg-slate-700', 'border', 'border-red-500/40', 'pulse-live');
+                recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
+                micIconContainer.innerHTML = '<i data-lucide="mic" class="h-4 w-4"></i>';
+                document.getElementById('recordBtnText').textContent = '녹음 시작';
+                
+                if (statusText.textContent.includes('분석 중') || statusText.textContent.includes('요약 중')) {
+                    updateStatus('AI 대기 중', 'idle');
                 }
                 lucide.createIcons();
             }
@@ -684,14 +852,14 @@ if (window.SpeechRecognition) {
             }
 
             if (isProcessing) {
-                showError('이전 녹음 데이터를 분석 중입니다. 잠시만 기다려주세요.');
+                showError('이전 기록을 분석 요약하는 중입니다. 완료 후 다시 시도하십시오.');
                 return;
             }
 
             if (!isRecording) {
                 const currentKey = apiKeyInput.value.trim();
                 if (!currentKey) {
-                    showError('API 키를 반드시 입력해주세요.');
+                    showError('Gemini API Key를 입력해주십시오.');
                     apiKeyInput.focus();
                     return;
                 }
@@ -704,20 +872,25 @@ if (window.SpeechRecognition) {
                 document.getElementById('saveTranscriptTxtBtn').disabled = true;
                 document.getElementById('saveInterimSummaryBtn').disabled = true;
                 document.getElementById('saveFinalSummaryDocBtn').disabled = true;
-                transcriptDiv.innerHTML = '<p class="text-slate-600 italic">녹음 중입니다... 말씀을 시작하세요.</p>';
-                interimSummaryDiv.innerHTML = '<p class="text-slate-600 italic">요약 분석 대기 중...</p>';
-                finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-600">녹음 종료 후 분석이 시작됩니다.</div>';
+                transcriptDiv.innerHTML = '';
+                interimSummaryDiv.innerHTML = '<p class="text-slate-500 italic">실시간 문맥 분석 대기 중...</p>';
+                finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-500 text-xs">강의를 녹음하는 중입니다...</div>';
 
                 try {
                     if (!isRecognizing) recognition.start();
-                    updateStatus('녹음 중...', 'recording');
-                    micIconContainer.innerHTML = '<i data-lucide="square" class="h-10 w-10 fill-current"></i>';
-                    recordBtn.classList.add('pulse-live', 'bg-rose-600');
-                    recordBtn.classList.remove('from-sky-500', 'to-indigo-600');
+                    updateStatus('오디오 기록 중', 'recording');
+                    
+                    // Live Recording Style
+                    recordBtn.classList.remove('bg-red-600/90', 'hover:bg-red-600');
+                    recordBtn.classList.add('bg-slate-800', 'hover:bg-slate-700', 'border', 'border-red-500/40', 'pulse-live');
+                    
+                    micIconContainer.innerHTML = '<span class="relative flex h-2.5 w-2.5 mr-0.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span></span>';
+                    document.getElementById('recordBtnText').textContent = '녹음 중지';
+                    
                     lucide.createIcons();
                     summaryInterval = setInterval(processInterimSummary, 15000);
                 } catch (err) {
-                    showError('마이크 시작 오류: ' + err.message);
+                    showError('음성 입력 개시 실패: ' + err.message);
                     isRecording = false;
                 }
             } else {
@@ -727,9 +900,9 @@ if (window.SpeechRecognition) {
 
         document.getElementById('toggleApiKey').addEventListener('click', (e) => {
             e.preventDefault();
-            apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
-            document.getElementById('eyeIconWrapper').innerHTML = `<i data-lucide="${apiKeyInput.type === 'password' ? 'eye' : 'eye-off'}" class="h-5 w-5"></i>`;
-            lucide.createIcons();
+            const isPassword = apiKeyInput.type === 'password';
+            apiKeyInput.type = isPassword ? 'text' : 'password';
+            document.getElementById('toggleApiKey').textContent = isPassword ? '숨기기' : '보기';
         });
 
         document.getElementById('saveTranscriptTxtBtn').addEventListener('click', (e) => {
@@ -739,7 +912,7 @@ if (window.SpeechRecognition) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${titleInput.value || '강의록'}_원본.txt`;
+            a.download = `${titleInput.value || '강의록'}_속기록.txt`;
             a.click();
             URL.revokeObjectURL(url);
         });
@@ -777,10 +950,10 @@ if (window.SpeechRecognition) {
                         }));
                     } else if (trimmed.startsWith('> ')) {
                         children.push(new Paragraph({
-                            children: [new TextRun({ text: trimmed.slice(2), italics: true, color: '555555' })],
+                            children: [new TextRun({ text: trimmed.slice(2), italics: true, color: '444444' })],
                             indent: { left: 720 },
                             spacing: { after: 120 },
-                            border: { left: { style: BorderStyle.SINGLE, size: 6, color: '4A9EBE' } }
+                            border: { left: { style: BorderStyle.SINGLE, size: 6, color: '1E3A8A' } }
                         }));
                     } else if (/^(\s*)-\s+\*\*(.+?)\*\*(.*)$/.test(trimmed)) {
                         const m = trimmed.match(/^(\s*)-\s+\*\*(.+?)\*\*(.*)$/);
@@ -797,7 +970,6 @@ if (window.SpeechRecognition) {
                         const m = trimmed.match(/^(\s*)-\s+(.+)$/);
                         const isSubBullet = m[1].length > 0;
                         let runText = m[2].replace(/\*\*(.+?)\*\*/g, '$1');
-                        const hasBold = /\*\*/.test(m[2]);
                         children.push(new Paragraph({
                             children: [new TextRun({ text: runText, bold: false })],
                             bullet: { level: isSubBullet ? 1 : 0 },
@@ -806,7 +978,7 @@ if (window.SpeechRecognition) {
                     } else if (trimmed === '---') {
                         children.push(new Paragraph({
                             children: [],
-                            border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CCCCCC' } },
+                            border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'DDDDDD' } },
                             spacing: { before: 120, after: 120 }
                         }));
                     } else if (trimmed === '') {
@@ -820,7 +992,7 @@ if (window.SpeechRecognition) {
                     }
                 }
 
-                const docTitle = titleInput.value || '강의노트';
+                const docTitle = titleInput.value || '강의록_요약';
                 const now = new Date().toLocaleString('ko-KR');
 
                 const document = new Document({
@@ -839,7 +1011,7 @@ if (window.SpeechRecognition) {
                         },
                         children: [
                             new Paragraph({
-                                children: [new TextRun({ text: '생성일시: ' + now, size: 18, color: '888888' })],
+                                children: [new TextRun({ text: '생성 시각: ' + now, size: 18, color: '666666' })],
                                 alignment: AlignmentType.RIGHT,
                                 spacing: { after: 240 }
                             }),
@@ -857,22 +1029,56 @@ if (window.SpeechRecognition) {
                 URL.revokeObjectURL(url);
             } catch (err) {
                 console.error(err);
-                showError('.docx 생성 오류: ' + err.message);
+                showError('.docx 파일 문서 생성 실패: ' + err.message);
             }
         });
 
         document.getElementById('saveInterimSummaryBtn').addEventListener('click', (e) => {
             e.preventDefault();
             if (summaryHistory.length === 0) return;
-            const mdHeader = `# ${titleInput.value || '강의 실시간 요약'}\n> 본 문서는 AI가 실시간으로 분석한 상세 요약본입니다.\n\n---\n\n`;
+            const mdHeader = `# ${titleInput.value || '실시간 강의 요약'}\n> 본 문서는 AI가 실시간으로 수집 및 중간 요약한 강의록입니다.\n\n---\n\n`;
             const mdContent = mdHeader + summaryHistory.join('\n\n---\n\n');
             const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${titleInput.value || '실시간요약_상세'}.md`;
+            a.download = `${titleInput.value || '실시간강의요약'}.md`;
             a.click();
             URL.revokeObjectURL(url);
+        });
+
+        // ── 자동 정보 로딩 및 연동 ─────────────────────────────────────────
+        window.addEventListener('load', () => {
+            const savedGeminiKey = localStorage.getItem('gemini_api_key');
+            if (savedGeminiKey) {
+                apiKeyInput.value = savedGeminiKey;
+            }
+
+            // 1순위: DEFAULT_FIREBASE_CONFIG
+            // 2순위: localStorage 백업값
+            const firebaseProjectId = DEFAULT_FIREBASE_CONFIG.projectId.trim() || localStorage.getItem('fb_project_id');
+            const firebaseApiKey = DEFAULT_FIREBASE_CONFIG.apiKey.trim() || localStorage.getItem('fb_api_key');
+
+            if (firebaseProjectId && firebaseApiKey) {
+                document.getElementById('fbProjectId').value = firebaseProjectId;
+                document.getElementById('fbApiKey').value = firebaseApiKey;
+                
+                // Silent auto-connect
+                connectFirebase(firebaseProjectId, firebaseApiKey, true);
+                
+                // In SaaS layout, keep collapsed by default
+                fbCollapsed = true;
+                fbInputsWrapper.style.maxHeight = '0px';
+                fbInputsWrapper.style.padding = '0px';
+                fbInputsWrapper.style.borderWidth = '0px';
+                fbChevron.setAttribute('data-lucide', 'chevron-down');
+                lucide.createIcons();
+            }
+
+            // Auto save Gemini key
+            apiKeyInput.addEventListener('input', () => {
+                localStorage.setItem('gemini_api_key', apiKeyInput.value.trim());
+            });
         });
     </script>
 </body>
