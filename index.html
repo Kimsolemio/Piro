@@ -247,6 +247,13 @@
                         </span>
                         <span id="recordBtnText">녹음 시작</span>
                     </button>
+
+                    <!-- Audio File Upload Button (Secure context fallback) -->
+                    <input type="file" id="audioFileInput" accept="audio/*" class="hidden">
+                    <button type="button" id="uploadBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-350 font-semibold px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md h-[38px] shrink-0 text-xs border border-slate-700">
+                        <i data-lucide="upload" class="h-4 w-4 text-blue-400"></i>
+                        <span>오디오 파일 업로드</span>
+                    </button>
                     
                     <!-- Dynamic state bar hidden but updated dynamically -->
                     <div id="status" class="hidden"><span id="status-indicator"></span><span id="status-text"></span></div>
@@ -259,19 +266,32 @@
                 <!-- Left Column (Live Transcript & Live AI Summary) -->
                 <div class="flex flex-col gap-4 min-h-0 h-full">
                     
-                    <!-- Live Transcript -->
+                    <!-- Live Transcript (With Tabs to prevent data loss) -->
                     <div class="premium-card rounded-2xl flex flex-col flex-1 min-h-0 shadow-md">
                         <div class="px-4 py-2.5 border-b border-slate-850/60 bg-slate-900/35 flex justify-between items-center shrink-0">
-                            <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                                <i data-lucide="mic" class="h-4 w-4 text-blue-400"></i> 실시간 강의 속기록
-                            </h2>
+                            <div class="flex items-center gap-3">
+                                <h2 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mr-1">
+                                    <i data-lucide="mic" class="h-4 w-4 text-blue-400"></i> 속기록
+                                </h2>
+                                <div class="flex bg-slate-950 p-0.5 rounded-lg border border-slate-850">
+                                    <button type="button" id="tabRawTranscript" class="px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20">실시간 원본</button>
+                                    <button type="button" id="tabAiTranscript" class="px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent">AI 맞춤법 교정본</button>
+                                </div>
+                            </div>
                             <button type="button" id="saveTranscriptTxtBtn" disabled class="save-btn group">
                                 <i data-lucide="download" class="h-3.5 w-3.5"></i>
                                 <span class="tooltip">TXT 다운로드</span>
                             </button>
                         </div>
-                        <div id="transcript" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
-                            <p class="text-slate-600 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>
+                        <div class="relative flex-grow min-h-0 flex flex-col">
+                            <!-- Raw Transcript Box -->
+                            <div id="transcript" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
+                                <p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>
+                            </div>
+                            <!-- AI Polished Transcript Box -->
+                            <div id="aiTranscriptContainer" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300 hidden">
+                                <p class="text-slate-650 italic">강의 종료 후 고정밀 AI 분석이 실행되면 교정본이 이곳에 출력됩니다.</p>
+                            </div>
                         </div>
                     </div>
 
@@ -413,6 +433,7 @@
             currentDocId = id;
             finalSummaryRawMarkdown = data.finalSummary || '';
             fullTranscript = data.transcript || '';
+            aiTranscript = data.aiTranscript || data.transcript || ''; // AI교정본이 있으면 우선 로드, 없으면 원본으로 대체
             titleInput.value = data.title || '';
 
             if (fullTranscript) {
@@ -421,10 +442,24 @@
                     .filter(l => l.trim())
                     .forEach(l => {
                         const bubble = document.createElement('div');
-                        bubble.className = 'transcript-bubble text-slate-300';
+                        bubble.className = 'transcript-bubble text-slate-300 mb-2 whitespace-pre-wrap';
                         bubble.textContent = l;
                         transcriptDiv.appendChild(bubble);
                     });
+                
+                // AI 교정 탭도 동일하게 주입
+                aiTranscriptContainer.innerHTML = '';
+                aiTranscript.split('\n')
+                    .filter(l => l.trim())
+                    .forEach(l => {
+                        const bubble = document.createElement('div');
+                        bubble.className = 'transcript-bubble text-slate-300 mb-2 whitespace-pre-wrap';
+                        bubble.textContent = l;
+                        aiTranscriptContainer.appendChild(bubble);
+                    });
+                
+                tabRawTranscript.click(); // 기본적으로 실시간 원본 탭을 보임
+                document.getElementById('saveTranscriptTxtBtn').disabled = false;
             }
             if (finalSummaryRawMarkdown) {
                 finalSummaryDiv.innerHTML = marked.parse(finalSummaryRawMarkdown);
@@ -477,6 +512,7 @@
             const payload = {
                 title: titleInput.value || '(제목 미정)',
                 transcript: fullTranscript,
+                aiTranscript: aiTranscript, // AI 교정본 필드 추가 저장
                 summaryHistory: summaryHistory,
                 finalSummary: finalSummaryRawMarkdown,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -531,9 +567,13 @@
 
         let isRecording = false;
         let isProcessing = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioStream = null;
         let isRecognizing = false;
         let recognition = null;
         let fullTranscript = '';
+        let aiTranscript = ''; // AI 교정 속기록 백업 보관
         let lastProcessedLength = 0;
         let isSummarizing = false;
         let summaryInterval = null;
@@ -555,6 +595,9 @@
         const titleInput = document.getElementById('titleInput');
         const contextInput = document.getElementById('contextInput');
         const transcriptDiv = document.getElementById('transcript');
+        const aiTranscriptContainer = document.getElementById('aiTranscriptContainer');
+        const tabRawTranscript = document.getElementById('tabRawTranscript');
+        const tabAiTranscript = document.getElementById('tabAiTranscript');
         const interimSummaryDiv = document.getElementById('interimSummary');
         const finalSummaryDiv = document.getElementById('finalSummary');
         const errorToast = document.getElementById('error-message');
@@ -745,6 +788,7 @@ ${chunk}
             recognition.continuous = true;
             recognition.interimResults = true; 
             recognition.lang = 'ko-KR';
+            recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
                 isRecognizing = true;
@@ -785,14 +829,9 @@ ${chunk}
                     stopRecordingAndAnalyze();
                 } else if (e.error === 'network') {
                     hadNetworkError = true;
-                    const now = Date.now();
-                    // 15초에 한 번만 Toast 출력하여 반복적인 UI 도배 방지
-                    if (now - lastNetworkErrorTime > 15000) {
-                        showError('네트워크 연결이 불안정합니다. 백그라운드에서 재연결을 시도합니다.');
-                        lastNetworkErrorTime = now;
-                    }
+                    console.log('음성 인식 네트워크 끊김 → 빠른 복구 시도');
                 } else if (e.error === 'audio-capture') {
-                    showError('마이크 오디오 캡처에 실패했습니다. 마이크 하드웨어 장치를 연결해 주십시오.');
+                    showError('마이크 오디오 캡처에 실패했습니다. 마이크 장치를 확인해 주십시오.');
                     stopRecordingAndAnalyze();
                 }
             };
@@ -801,8 +840,8 @@ ${chunk}
                 isRecognizing = false;
                 
                 if (isRecording) {
-                    // 네트워크 장애가 났던 상태라면 리커버리 속도를 주기 위해 대기시간(3초)을 늘려 루프 통신 과부하 방지
-                    const restartDelay = hadNetworkError ? 3000 : 400;
+                    // 네트워크 에러 시 600ms 대기로 크롬 과부하 방지, 일반 무음 끊김 시 300ms 빠른 복구
+                    const restartDelay = hadNetworkError ? 600 : 300;
                     hadNetworkError = false; 
                     
                     setTimeout(() => {
@@ -810,7 +849,7 @@ ${chunk}
                             try { 
                                 recognition.start(); 
                             } catch (err) {
-                                console.error('음성 스냅샷 재시작 실패:', err);
+                                console.error('음성 인식 재시작 실패:', err);
                             }
                         }
                     }, restartDelay); 
@@ -826,7 +865,34 @@ ${chunk}
             }
             if (summaryInterval) clearInterval(summaryInterval);
 
-            if (fullTranscript.trim().length === 0) {
+            // Stop MediaRecorder and collect the audio Blob
+            let audioBlob = null;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                const recorderStopped = new Promise((resolve) => {
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                        resolve(blob);
+                    };
+                });
+                try {
+                    mediaRecorder.stop();
+                    audioBlob = await recorderStopped;
+                } catch (err) {
+                    console.error('MediaRecorder 중지 실패:', err);
+                }
+            }
+
+            // Stop mic stream tracks to release device
+            if (audioStream) {
+                try {
+                    audioStream.getTracks().forEach(track => track.stop());
+                } catch (err) {
+                    console.error('오디오 스트림 해제 실패:', err);
+                }
+            }
+
+            const hasAudio = audioBlob && audioBlob.size > 1000;
+            if (fullTranscript.trim().length === 0 && !hasAudio) {
                 cleanupRecordingUI();
                 return;
             }
@@ -844,14 +910,12 @@ ${chunk}
                 // 실시간 요약 정리 마지막 1회 가동
                 await processInterimSummary();
 
-                // 텍스트 기반 고정밀 AI 보정 및 요약 실행
+                // 텍스트 및 오디오 기반 고정밀 AI 분석
                 let success = false;
-                if (fullTranscript.trim().length > 10) {
-                    success = await generateHighAccuracyTextAndSummary();
-                }
+                success = await generateHighAccuracyTextAndSummary(audioBlob);
 
                 if (!success) {
-                    console.log('고정밀 텍스트 분석 실패, 일반 요약 폴백 실행...');
+                    console.log('고정밀 오디오 분석 실패, 일반 요약 폴백 실행...');
                     await generateFinalSummary();
                 }
             } catch (err) {
@@ -885,7 +949,7 @@ ${chunk}
             lucide.createIcons();
         }
 
-        async function generateHighAccuracyTextAndSummary() {
+        async function generateHighAccuracyTextAndSummary(audioBlob) {
             const currentKey = apiKeyInput.value.trim();
             if (!currentKey) {
                 showError('Gemini API Key를 입력해주십시오.');
@@ -895,15 +959,30 @@ ${chunk}
             const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
-            updateStatus('고정밀 텍스트 교정 및 요약 중...', 'processing');
+            updateStatus('고정밀 오디오 분석 및 요약 중...', 'processing');
 
-            const systemPrompt = `
+            let payload = null;
+            if (audioBlob && audioBlob.size > 1000) {
+                // Convert Blob to Base64
+                const base64Audio = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(audioBlob);
+                });
+
+                const systemPrompt = `
 당신은 강의록 및 세미나 회의록 요약을 작성하는 최고 권위의 인공지능 속기사이자 교육 에디터입니다.
-제공된 거친 속기록(음성 인식 텍스트)을 정밀 분석하여 문장부호를 복구하고 아래의 요청 사항을 한글로 도출하십시오.
+제공된 녹음 오디오 데이터를 정밀 분석하여 아래의 요청 사항을 한글로 도출하십시오.
+
+[속기록 작성 절대 규칙 - 무손실 받아쓰기]
+1. 오디오에서 청취 가능한 모든 화자의 발화 내용, 사실 관계, 세부 예시, 언급된 수치나 고유 명사를 **단 하나도 누락하거나 축소하지 마십시오.**
+2. 듣기 편하게 만든다는 핑계로 문장을 임의로 요약하거나 압축하여 내용을 손실시키는 행위는 절대 금지됩니다. 전체 상세 정보의 보존을 최우선으로 하십시오.
+3. 오직 맞춤법, 띄어쓰기, 적절한 문장 부호(마침표, 쉼표 등)의 삽입, 그리고 '어...', '저...' 같은 의미 없는 구어체 감탄사(필러 단어)만 자연스럽게 정돈하여, 원문의 발화 내용을 온전히 보존한 완결된 문장들로 작성하십시오.
 
 반드시 다음 JSON 형식으로 출력해야 합니다:
 {
-  "transcript": "거친 속기록을 바탕으로 마침표, 쉼표, 물음표 등 문장부호와 맞춤법 및 띄어쓰기를 완벽히 보정하여 독자가 읽기 편한 완결된 문단 형태로 재작성한 것.",
+  "transcript": "위 무손실 받아쓰기 규칙을 엄격히 적용하여, 오디오의 모든 한국어 발화를 단 한 줄의 생략이나 왜곡 없이 고스란히 받아적은 고정밀 텍스트.",
   "summary": "마크다운(Markdown) 포맷으로 작성된 강의/회의 요약 보고서 노트. 아래에 지정된 형식을 엄수해야 합니다."
 }
 
@@ -922,31 +1001,95 @@ ${chunk}
   - 상세 설명 및 핵심 내용 정리
 `;
 
-            const payload = {
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                contents: [{
-                    parts: [
-                        {
-                            text: `[거친 실시간 속기록 원본]\n${fullTranscript}\n\n[요약 지침 지시사항]
+                payload = {
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{
+                        parts: [
+                            {
+                                inlineData: {
+                                    mimeType: audioBlob.type || 'audio/webm',
+                                    data: base64Audio
+                                }
+                            },
+                            {
+                                text: `[요약 지침 지시사항]
+- 강의/회의 제목: ${titleInput.value || '미정'}
+- 추가 요약 가이드 지침: ${contextInput.value || '없음'}
+
+위 오디오 녹음 데이터를 정밀하게 듣고, 100% 무손실 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
+                            }
+                        ]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                transcript: { type: "STRING", description: "The full, punctuated, and corrected transcript of the audio in Korean." },
+                                summary: { type: "STRING", description: "The final formatted markdown summary report." }
+                            },
+                            required: ["transcript", "summary"]
+                        }
+                    }
+                };
+            } else {
+                // Fallback: Text-based analysis using the SpeechRecognition output
+                const systemPrompt = `
+당신은 강의록 및 세미나 회의록 요약을 작성하는 최고 권위의 인공지능 속기사이자 교육 에디터입니다.
+제공된 거친 속기록(음성 인식 텍스트)을 정밀 보정하여 문장부호를 복구하고 아래의 요청 사항을 한글로 도출하십시오.
+
+[속기록 보정 절대 규칙 - 무손실 기록]
+1. 원본 거친 속기록에 담긴 모든 화자의 발화 내용, 사실 관계, 세부 예시, 언급된 수치나 고유 명사를 **단 하나도 누락하거나 축소하지 마십시오.**
+2. 임의로 문장을 요약하거나 압축하여 내용을 손실시키는 행위는 절대 금지됩니다. 정보의 양과 상세도는 원본과 100% 동일해야 합니다.
+3. 오직 맞춤법, 띄어쓰기, 적절한 문장 부호(마침표, 쉼표 등)의 삽입, 그리고 '어...', '저...' 같은 의미 없는 구어체 감탄사(필러 단어)만 자연스럽게 정돈하여, 원문의 모든 정보를 온전히 보존한 완결된 문장들로 복구하십시오.
+
+반드시 다음 JSON 형식으로 출력해야 합니다:
+{
+  "transcript": "위 무손실 보정 규칙을 엄격히 적용하여, 원본 속기록의 모든 정보를 단 한 단어의 왜곡이나 누락 없이 맞춤법과 문장부호만 보정한 무손실 텍스트.",
+  "summary": "마크다운(Markdown) 포맷으로 작성된 강의/회의 요약 보고서 노트. 아래에 지정된 형식을 엄수해야 합니다."
+}
+
+[요약 보고서 형식 (summary 필드 값)]
+# [강의 및 회의 제목]
+> **핵심 요약:** 본 문서는 구글 AI가 회의 오디오를 고정밀 분석하여 요약한 최종 학술 강의록 보고서입니다.
+
+## 1. 개요 및 취지
+- **기록 목적 및 배경:**
+- **주요 핵심 주제:**
+
+## 2. 주요 핵심 내용
+- **[핵심 키워드 1]**
+  - 상세 설명 및 핵심 내용 정리
+- **[핵심 키워드 2]**
+  - 상세 설명 및 핵심 내용 정리
+`;
+
+                payload = {
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{
+                        parts: [
+                            {
+                                text: `[거친 실시간 속기록 원본]\n${fullTranscript}\n\n[요약 지침 지시사항]
 - 강의/회의 제목: ${titleInput.value || '미정'}
 - 추가 요약 가이드 지침: ${contextInput.value || '없음'}
 
 위 속기록을 바탕으로, 완벽히 교정된 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
+                            }
+                        ]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                transcript: { type: "STRING", description: "The full, punctuated, and corrected transcript of the audio in Korean." },
+                                summary: { type: "STRING", description: "The final formatted markdown summary report." }
+                            },
+                            required: ["transcript", "summary"]
                         }
-                    ]
-                }],
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            transcript: { type: "STRING", description: "The full, punctuated, and corrected transcript of the audio in Korean." },
-                            summary: { type: "STRING", description: "The final formatted markdown summary report." }
-                        },
-                        required: ["transcript", "summary"]
                     }
-                }
-            };
+                };
+            }
 
             const delays = [1000, 2000, 4000, 8000];
             let lastErrorMsg = '';
@@ -978,14 +1121,20 @@ ${chunk}
                     }
                     const parsed = JSON.parse(cleanedText);
                     if (parsed.transcript && parsed.summary) {
-                        // 1. 속기록 창 갈아끼우기
-                        fullTranscript = parsed.transcript;
-                        transcriptDiv.innerHTML = '<p id="liveParagraph" class="text-slate-300 leading-relaxed whitespace-pre-wrap inline"></p><span id="interimSpan" class="text-slate-500 italic ml-1"></span>';
-                        document.getElementById('liveParagraph').textContent = fullTranscript;
-                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                        // AI 속기록 교정본 저장 및 출력 (원본 fullTranscript는 온전히 보관)
+                        aiTranscript = parsed.transcript;
+                        aiTranscriptContainer.innerHTML = '';
+                        const p = document.createElement('p');
+                        p.className = 'text-slate-300 leading-relaxed whitespace-pre-wrap';
+                        p.textContent = aiTranscript;
+                        aiTranscriptContainer.appendChild(p);
+                        aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
+                        
+                        // AI 맞춤법 교정본 탭 활성화
+                        tabAiTranscript.click();
                         document.getElementById('saveTranscriptTxtBtn').disabled = false;
 
-                        // 2. 최종 요약집 갱신
+                        // 최종 요약집 갱신
                         finalSummaryRawMarkdown = parsed.summary;
                         finalSummaryDiv.innerHTML = marked.parse(finalSummaryRawMarkdown);
                         document.getElementById('saveFinalSummaryDocBtn').disabled = false;
@@ -1009,6 +1158,165 @@ ${chunk}
 
             console.error('고정밀 오디오 분석 실패, 기존 텍스트 분석으로 전환합니다:', lastErrorMsg);
             return false;
+        }
+
+        async function processUploadedAudioFile(file) {
+            const currentKey = apiKeyInput.value.trim();
+            if (!currentKey) {
+                showError('Gemini API Key를 입력해주십시오.');
+                return;
+            }
+
+            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
+
+            updateStatus('오디오 분석 중...', 'processing');
+            document.getElementById('interimSummaryLoader').classList.remove('hidden');
+
+            // Convert File to Base64
+            const base64Audio = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            const systemPrompt = `
+당신은 강의록 및 세미나 회의록 요약을 작성하는 최고 권위의 인공지능 속기사이자 교육 에디터입니다.
+제공된 녹음 오디오 데이터를 정밀 분석하여 아래의 요청 사항을 한글로 도출하십시오.
+
+[속기록 작성 절대 규칙 - 무손실 받아쓰기]
+1. 오디오에서 청취 가능한 모든 화자의 발화 내용, 사실 관계, 세부 예시, 언급된 수치나 고유 명사를 **단 하나도 누락하거나 축소하지 마십시오.**
+2. 듣기 편하게 만든다는 핑계로 문장을 임의로 요약하거나 압축하여 내용을 손실시키는 행위는 절대 금지됩니다. 전체 상세 정보의 보존을 최우선으로 하십시오.
+3. 오직 맞춤법, 띄어쓰기, 적절한 문장 부호(마침표, 쉼표 등)의 삽입, 그리고 '어...', '저...' 같은 의미 없는 구어체 감탄사(필러 단어)만 자연스럽게 정돈하여, 원문의 발화 내용을 온전히 보존한 완결된 문장들로 작성하십시오.
+
+반드시 다음 JSON 형식으로 출력해야 합니다:
+{
+  "transcript": "위 무손실 받아쓰기 규칙을 엄격히 적용하여, 오디오의 모든 한국어 발화를 단 한 줄의 생략이나 왜곡 없이 고스란히 받아적은 고정밀 텍스트.",
+  "summary": "마크다운(Markdown) 포맷으로 작성된 강의/회의 요약 보고서 노트. 아래에 지정된 형식을 엄수해야 합니다."
+}
+
+[요약 보고서 형식 (summary 필드 값)]
+# [강의 및 회의 제목]
+> **핵심 요약:** 본 문서는 구글 AI가 회의 오디오를 고정밀 분석하여 요약한 최종 학술 강의록 보고서입니다.
+
+## 1. 개요 및 취지
+- **기록 목적 및 배경:**
+- **주요 핵심 주제:**
+
+## 2. 주요 핵심 내용
+- **[핵심 키워드 1]**
+  - 상세 설명 및 핵심 내용 정리
+- **[핵심 키워드 2]**
+  - 상세 설명 및 핵심 내용 정리
+`;
+
+            const payload = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: [{
+                    parts: [
+                        {
+                            inlineData: {
+                                mimeType: file.type || 'audio/webm',
+                                data: base64Audio
+                            }
+                        },
+                        {
+                            text: `[요약 지침 지시사항]
+- 강의/회의 제목: ${titleInput.value || '미정'}
+- 추가 요약 가이드 지침: ${contextInput.value || '없음'}
+
+위 오디오 녹음 데이터를 듣고, 텍스트 받아쓰기(transcript)와 최종 학술 요약 보고서(summary)를 위 정의한 JSON 규격에 정확히 맞추어 생성해 주십시오.`
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            transcript: { type: "STRING", description: "The full, punctuated, and corrected transcript of the audio in Korean." },
+                            summary: { type: "STRING", description: "The final formatted markdown summary report." }
+                        },
+                        required: ["transcript", "summary"]
+                    }
+                }
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errMsg = `HTTP ${response.status}`;
+                    try {
+                        const errData = await response.json();
+                        errMsg = errData.error?.message || errMsg;
+                    } catch (e) {}
+                    throw new Error(`[${response.status}] ${errMsg}`);
+                }
+
+                const data = await response.json();
+                const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!rawText) throw new Error('API 응답에 데이터가 없습니다.');
+
+                let cleanedText = rawText.trim();
+                if (cleanedText.startsWith('```')) {
+                    cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                }
+                const parsed = JSON.parse(cleanedText);
+                if (parsed.transcript && parsed.summary) {
+                    // Update UI (Both raw and AI tab share the uploaded transcript)
+                    fullTranscript = parsed.transcript;
+                    aiTranscript = parsed.transcript;
+                    
+                    const p1 = document.createElement('p');
+                    p1.id = 'liveParagraph';
+                    p1.className = 'mb-4 leading-relaxed whitespace-pre-wrap';
+                    p1.textContent = fullTranscript;
+                    transcriptDiv.innerHTML = '';
+                    transcriptDiv.appendChild(p1);
+
+                    const p2 = document.createElement('p');
+                    p2.className = 'mb-4 leading-relaxed whitespace-pre-wrap';
+                    p2.textContent = aiTranscript;
+                    aiTranscriptContainer.innerHTML = '';
+                    aiTranscriptContainer.appendChild(p2);
+                    
+                    // Default to raw tab view
+                    tabRawTranscript.click();
+
+                    // Update summaries
+                    finalSummaryRawMarkdown = parsed.summary;
+                    finalSummaryDiv.innerHTML = marked.parse(parsed.summary);
+                    interimSummaryDiv.innerHTML = marked.parse(parsed.summary);
+
+                    // Enable download buttons
+                    document.getElementById('saveFinalSummaryDocBtn').disabled = false;
+                    document.getElementById('saveTranscriptTxtBtn').disabled = false;
+                    document.getElementById('saveInterimSummaryBtn').disabled = false;
+
+                    // Save to Firebase if active
+                    if (fbDb) {
+                        saveToFirebase(!!currentDocId);
+                    }
+
+                    updateStatus('분석 완료', 'idle');
+                    showToast('오디오 파일 고정밀 분석 및 요약을 성공적으로 마쳤습니다.', 'success');
+                } else {
+                    throw new Error('응답의 JSON 필드가 누락되었습니다.');
+                }
+            } catch (err) {
+                console.error(err);
+                showError('오디오 분석 실패: ' + err.message);
+                updateStatus('분석 실패', 'idle');
+            } finally {
+                document.getElementById('interimSummaryLoader').classList.add('hidden');
+                lucide.createIcons();
+            }
         }
 
         recordBtn.addEventListener('click', async (e) => {
@@ -1036,6 +1344,7 @@ ${chunk}
                 hadNetworkError = false;
                 lastNetworkErrorTime = 0;
                 fullTranscript = '';
+                aiTranscript = '';
                 summaryHistory = [];
                 lastProcessedLength = 0;
                 finalSummaryRawMarkdown = '';
@@ -1043,10 +1352,38 @@ ${chunk}
                 document.getElementById('saveInterimSummaryBtn').disabled = true;
                 document.getElementById('saveFinalSummaryDocBtn').disabled = true;
                 transcriptDiv.innerHTML = '<p id="liveParagraph" class="text-slate-300 leading-relaxed inline"></p><span id="interimSpan" class="text-slate-500 italic ml-1"></span>';
+                aiTranscriptContainer.innerHTML = '<p class="text-slate-650 italic">강의 종료 후 고정밀 AI 분석이 실행되면 교정본이 이곳에 출력됩니다.</p>';
+                
+                // 원본 탭으로 자동 복원
+                tabRawTranscript.click();
+                
                 interimSummaryDiv.innerHTML = '<p class="text-slate-500 italic">실시간 문맥 분석 대기 중...</p>';
                 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-500 text-xs">강의를 녹음하는 중입니다...</div>';
 
                 try {
+                    // Initialize MediaRecorder for background audio recording
+                    audioChunks = [];
+                    try {
+                        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        let options = { mimeType: 'audio/webm' };
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: 'audio/ogg' };
+                        }
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: '' }; 
+                        }
+                        mediaRecorder = new MediaRecorder(audioStream, options);
+                        mediaRecorder.ondataavailable = (event) => {
+                            if (event.data.size > 0) {
+                                audioChunks.push(event.data);
+                            }
+                        };
+                        mediaRecorder.start();
+                    } catch (mErr) {
+                        console.warn('MediaRecorder 초기화 실패 (실시간 음성인식만 작동):', mErr);
+                        mediaRecorder = null;
+                    }
+
                     // Start SpeechRecognition immediately to avoid dropping first words!
                     if (!isRecognizing) recognition.start();
                     updateStatus('오디오 기록 중', 'recording');
@@ -1063,6 +1400,11 @@ ${chunk}
                 } catch (err) {
                     showError('음성 입력 개시 실패: ' + err.message);
                     isRecording = false;
+                    if (audioStream) {
+                        try {
+                            audioStream.getTracks().forEach(track => track.stop());
+                        } catch (stErr) {}
+                    }
                 }
             } else {
                 stopRecordingAndAnalyze();
@@ -1078,12 +1420,17 @@ ${chunk}
 
         document.getElementById('saveTranscriptTxtBtn').addEventListener('click', (e) => {
             e.preventDefault();
-            if (!fullTranscript) return;
-            const blob = new Blob([fullTranscript], { type: 'text/plain;charset=utf-8' });
+            // 활성화된 탭에 따라 다운로드할 내용 결정
+            const isRawTab = !aiTranscriptContainer.classList.contains('hidden');
+            const contentToSave = isRawTab ? aiTranscript : fullTranscript;
+            const suffix = isRawTab ? 'AI교정본' : '실시간원본';
+            
+            if (!contentToSave) return;
+            const blob = new Blob([contentToSave], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${titleInput.value || '강의록'}_속기록.txt`;
+            a.download = `${titleInput.value || '강의록'}_속기록(${suffix}).txt`;
             a.click();
             URL.revokeObjectURL(url);
         });
@@ -1220,9 +1567,64 @@ ${chunk}
 
         // ── 자동 정보 로딩 및 연동 ─────────────────────────────────────────
         window.addEventListener('load', () => {
+            // Transcript Tabs switching logic
+            function switchTranscriptTab(tab) {
+                if (tab === 'raw') {
+                    tabRawTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20';
+                    tabAiTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent';
+                    transcriptDiv.classList.remove('hidden');
+                    aiTranscriptContainer.classList.add('hidden');
+                } else {
+                    tabAiTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all bg-blue-600/20 text-blue-400 border border-blue-500/20';
+                    tabRawTranscript.className = 'px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all text-slate-500 hover:text-slate-300 border border-transparent';
+                    aiTranscriptContainer.classList.remove('hidden');
+                    transcriptDiv.classList.add('hidden');
+                }
+            }
+
+            tabRawTranscript.addEventListener('click', () => switchTranscriptTab('raw'));
+            tabAiTranscript.addEventListener('click', () => switchTranscriptTab('ai'));
+
             const savedGeminiKey = localStorage.getItem('gemini_api_key');
             if (savedGeminiKey) {
                 apiKeyInput.value = savedGeminiKey;
+            }
+
+            // Audio File Upload Trigger listeners
+            const uploadBtn = document.getElementById('uploadBtn');
+            const audioFileInput = document.getElementById('audioFileInput');
+
+            uploadBtn.addEventListener('click', () => {
+                audioFileInput.click();
+            });
+
+            audioFileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    await processUploadedAudioFile(file);
+                }
+            });
+
+            // Check protocol for Web Speech API compatibility warning
+            if (window.location.protocol === 'file:') {
+                transcriptDiv.innerHTML = `
+                    <div class="bg-red-950/30 border border-red-800/40 rounded-xl p-3.5 text-xs text-red-300 leading-normal flex flex-col gap-2 shadow-inner">
+                        <div class="font-bold flex items-center gap-1.5 text-red-400">
+                            <i data-lucide="alert-triangle" class="h-4 w-4"></i> 브라우저 보안 정책 제한 안내
+                        </div>
+                        <p>크롬(Chrome) 브라우저의 보안 규정상, HTML 파일을 직접 더블 클릭하여 실행한 로컬 경로(<code>file://</code>)에서는 마이크 권한 획득이 불가능하여 <strong>실시간 속기 기능이 작동하지 않습니다.</strong></p>
+                        <div class="border-t border-red-800/20 my-1"></div>
+                        <p class="font-semibold text-slate-350">💡 해결 방법:</p>
+                        <ul class="list-disc list-inside space-y-1 text-slate-400">
+                            <li>옆의 <strong>[오디오 파일 업로드]</strong> 버튼을 사용하여 녹음된 음성 파일을 Gemini AI로 즉시 요약 분석할 수 있습니다 (추천).</li>
+                            <li>또는 VS Code의 Live Server나 아래 명령어로 로컬 서버(<code>localhost</code>) 환경에서 실행하십시오.</li>
+                        </ul>
+                        <div class="bg-slate-950 p-2 rounded-lg text-[10px] font-mono select-all text-slate-400 border border-slate-900 mt-1">
+                            npx http-server -p 8080
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
             }
 
             // 1순위: DEFAULT_FIREBASE_CONFIG
@@ -1246,9 +1648,16 @@ ${chunk}
                 lucide.createIcons();
             }
 
-            // Auto save Gemini key
+            // Auto save Gemini key and fetch models with debounce
+            let fetchTimeout = null;
             apiKeyInput.addEventListener('input', () => {
-                localStorage.setItem('gemini_api_key', apiKeyInput.value.trim());
+                const key = apiKeyInput.value.trim();
+                localStorage.setItem('gemini_api_key', key);
+                
+                clearTimeout(fetchTimeout);
+                fetchTimeout = setTimeout(() => {
+                    fetchAvailableModels();
+                }, 800);
             });
 
             // Dynamic Model Fetching Logic
