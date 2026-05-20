@@ -581,6 +581,9 @@
         let finalSummaryRawMarkdown = '';
         let hadNetworkError = false;
         let lastNetworkErrorTime = 0;
+        let networkErrorCount = 0;
+        let lastPolishedLength = 0;
+        let isPolishingChunk = false;
 
         // Firebase State
         let fbApp = null;
@@ -680,11 +683,12 @@
             return null;
         }
 
-        async function processInterimSummary() {
+        async function processInterimSummary(isFinal = false) {
             if (isSummarizing || !isRecording) return;
 
             const chunk = fullTranscript.substring(lastProcessedLength).trim();
-            if (chunk.length < 40) return;
+            const minLength = isFinal ? 20 : 300;
+            if (chunk.length < minLength) return;
 
             isSummarizing = true;
             document.getElementById('interimSummaryLoader').classList.remove('hidden');
@@ -729,6 +733,78 @@ ${chunk}
             isSummarizing = false;
             document.getElementById('interimSummaryLoader').classList.add('hidden');
             lucide.createIcons();
+        }
+
+        async function triggerChunkPolishing() {
+            const currentKey = apiKeyInput.value.trim();
+            if (!currentKey || isPolishingChunk || !isRecording) return;
+
+            const startIdx = lastPolishedLength;
+            const endIdx = fullTranscript.length;
+            const chunk = fullTranscript.substring(startIdx, endIdx).trim();
+            if (chunk.length < 50) return;
+
+            isPolishingChunk = true;
+
+            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
+
+            const prompt = `당신은 실시간 속기 교정 에디터입니다. 아래 제공된 한국어 음성 인식 텍스트(거친 텍스트)를 문맥에 맞게 맞춤법을 교정하고 문장부호(마침표, 쉼표 등)를 채워 넣으십시오.
+절대 내용을 요약하거나 단어를 누락하지 말고, 원문의 모든 정보를 온전히 보존하십시오.
+답변에는 다른 설명 없이 오직 교정된 텍스트만 출력하십시오.`;
+
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { text: `[거친 텍스트]\n${chunk}` }
+                    ]
+                }]
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (result) {
+                        const cleanedResult = result.trim();
+                        
+                        // Append to aiTranscript
+                        if (aiTranscript.length > 0) {
+                            aiTranscript += ' ' + cleanedResult;
+                        } else {
+                            aiTranscript = cleanedResult;
+                        }
+
+                        // Update AI Polished transcript UI
+                        aiTranscriptContainer.innerHTML = '';
+                        const p = document.createElement('p');
+                        p.className = 'text-slate-300 leading-relaxed whitespace-pre-wrap';
+                        p.textContent = aiTranscript;
+                        aiTranscriptContainer.appendChild(p);
+                        aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
+                        document.getElementById('saveTranscriptTxtBtn').disabled = false;
+
+                        // Advance the polished pointer
+                        lastPolishedLength = endIdx;
+                    }
+                }
+            } catch (err) {
+                console.error('실시간 청크 교정 실패:', err);
+            } finally {
+                isPolishingChunk = false;
+                
+                // If more text has accumulated while calling the API, trigger again
+                if (fullTranscript.length - lastPolishedLength >= 300 && isRecording) {
+                    setTimeout(triggerChunkPolishing, 1000);
+                }
+            }
         }
 
         async function generateFinalSummary() {
@@ -795,7 +871,8 @@ ${chunk}
                 updateStatus('오디오 기록 중', 'recording');
             };
 
-            recognition.onresult = (event) => {
+             recognition.onresult = (event) => {
+                networkErrorCount = 0; // Reset network error count on successful recognition
                 let interimTranscript = '';
                 let finalChunk = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -811,6 +888,11 @@ ${chunk}
                     const lp = document.getElementById('liveParagraph');
                     if (lp) lp.textContent = fullTranscript;
                     document.getElementById('saveTranscriptTxtBtn').disabled = false;
+                    
+                    // Trigger chunk-based real-time AI polishing every 300 characters
+                    if (fullTranscript.length - lastPolishedLength >= 300 && !isPolishingChunk) {
+                        triggerChunkPolishing();
+                    }
                 }
                 
                 const ispan = document.getElementById('interimSpan');
@@ -829,7 +911,11 @@ ${chunk}
                     stopRecordingAndAnalyze();
                 } else if (e.error === 'network') {
                     hadNetworkError = true;
-                    console.log('음성 인식 네트워크 끊김 → 빠른 복구 시도');
+                    networkErrorCount++;
+                    console.log(`음성 인식 네트워크 끊김 (${networkErrorCount}회) → 빠른 복구 시도`);
+                    if (networkErrorCount === 4) {
+                        showError('구글 음성인식 서버 연결이 지연되고 있습니다. 실시간 자막은 중단되었으나, 백그라운드 녹음은 정상 진행 중이므로 종료 시 최종 요약본이 생성됩니다.');
+                    }
                 } else if (e.error === 'audio-capture') {
                     showError('마이크 오디오 캡처에 실패했습니다. 마이크 장치를 확인해 주십시오.');
                     stopRecordingAndAnalyze();
@@ -840,6 +926,10 @@ ${chunk}
                 isRecognizing = false;
                 
                 if (isRecording) {
+                    if (networkErrorCount >= 4) {
+                        console.warn('네트워크 오류 누적으로 실시간 음성인식 재연결을 일시 중단합니다. 백그라운드 오디오 녹음은 유지됩니다.');
+                        return;
+                    }
                     // 네트워크 에러 시 600ms 대기로 크롬 과부하 방지, 일반 무음 끊김 시 300ms 빠른 복구
                     const restartDelay = hadNetworkError ? 600 : 300;
                     hadNetworkError = false; 
@@ -908,7 +998,7 @@ ${chunk}
 
             try {
                 // 실시간 요약 정리 마지막 1회 가동
-                await processInterimSummary();
+                await processInterimSummary(true);
 
                 // 텍스트 및 오디오 기반 고정밀 AI 분석
                 let success = false;
@@ -1343,6 +1433,9 @@ ${chunk}
                 isRecording = true;
                 hadNetworkError = false;
                 lastNetworkErrorTime = 0;
+                networkErrorCount = 0;
+                lastPolishedLength = 0;
+                isPolishingChunk = false;
                 fullTranscript = '';
                 aiTranscript = '';
                 summaryHistory = [];
