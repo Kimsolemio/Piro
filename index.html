@@ -172,7 +172,7 @@
                         <button type="button" id="refreshModelsBtn" class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors hidden" title="모델 새로고침"><i data-lucide="refresh-cw" class="h-3 w-3"></i></button>
                     </div>
                     <select id="modelSelect" class="bg-slate-950 border border-slate-850 text-slate-200 text-[11px] rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5 font-mono transition-colors">
-                        <option value="gemini-1.5-flash">API Key를 입력하면 최신 모델을 조회합니다...</option>
+                        <option value="gemini-3.5-flash">API Key를 입력하면 최신 모델을 조회합니다...</option>
                     </select>
                 </div>
 
@@ -629,7 +629,7 @@
                 return null;
             }
 
-            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const model = document.getElementById('modelSelect').value || 'gemini-3.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
             const payload = {
                 systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -737,7 +737,7 @@ ${chunk}
             isPolishingChunk = true;
             document.getElementById('interimSummaryLoader').classList.remove('hidden');
 
-            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const model = document.getElementById('modelSelect').value || 'gemini-3.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
             const prompt = `당신은 실시간 속기 및 요약 전문가입니다. 제공된 한국어 음성 인식 텍스트(거친 텍스트)를 맞춤법 교정하고, 동시에 해당 청크의 핵심을 불렛마크로 요약해 주십시오.
@@ -1065,13 +1065,18 @@ ${chunk}
                 return false;
             }
 
-            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const model = document.getElementById('modelSelect').value || 'gemini-3.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
             updateStatus('고정밀 오디오 분석 및 요약 중...', 'processing');
 
             let payload = null;
             if (audioBlob && audioBlob.size > 1000) {
+                if (audioBlob.size > 15 * 1024 * 1024) {
+                    console.warn('오디오 파일이 너무 큽니다(>15MB). 텍스트 기반 요약으로 자동 폴백합니다.');
+                    return false; // Fallback to text-only processing
+                }
+                
                 // Convert Blob to Base64
                 const base64Audio = await new Promise((resolve, reject) => {
                     const reader = new FileReader();
@@ -1276,7 +1281,7 @@ ${chunk}
                 return;
             }
 
-            const model = document.getElementById('modelSelect').value || 'gemini-1.5-flash';
+            const model = document.getElementById('modelSelect').value || 'gemini-3.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
             updateStatus('오디오 분석 중...', 'processing');
@@ -1486,7 +1491,7 @@ ${chunk}
                                 audioChunks.push(event.data);
                             }
                         };
-                        mediaRecorder.start();
+                        mediaRecorder.start(3000); // 3-second timeslice for memory stability
                     } catch (mErr) {
                         console.warn('MediaRecorder 초기화 실패 (실시간 음성인식만 작동):', mErr);
                         mediaRecorder = null;
@@ -1803,7 +1808,7 @@ ${chunk}
                     }
                 } catch (err) {
                     console.warn(err);
-                    modelSelect.innerHTML = '<option value="gemini-1.5-flash">조회 실패 (기본값 사용: gemini-1.5-flash)</option>';
+                    modelSelect.innerHTML = '<option value="gemini-3.5-flash">조회 실패 (기본값 사용: gemini-3.5-flash)</option>';
                 } finally {
                     lucide.createIcons();
                 }
