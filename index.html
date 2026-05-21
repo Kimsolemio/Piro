@@ -912,21 +912,22 @@ ${chunk}
             };
 
             recognition.onerror = (e) => {
-                console.warn('Speech Recognition Error:', e.error);
-                
                 if (e.error === 'not-allowed') {
                     showError('마이크 권한이 거부되었습니다. 마이크 입력을 허용해 주십시오.');
                     stopRecordingAndAnalyze();
                 } else if (e.error === 'network') {
                     hadNetworkError = true;
                     networkErrorCount++;
-                    console.warn(`음성 인식 네트워크 끊김 (${networkErrorCount}회) → 백오프 복구 시도`);
-                    if (networkErrorCount === 3) {
-                        showError('네트워크 연결이 불안정하여 실시간 자막 연결이 지연되고 있습니다. 연결이 복구되면 자동으로 재개됩니다. (백그라운드 녹음은 정상 진행 중)');
+                    // 크롬 음성인식 API는 정상 작동 중에도 network 에러를 주기적으로 발생시킴 (정상 동작)
+                    // 조용히 처리하고 빠르게 재연결
+                    if (networkErrorCount >= 10 && networkErrorCount % 10 === 0) {
+                        showError('음성인식 서버 연결이 불안정합니다. 자동 재연결 중이며, 백그라운드 녹음은 정상 진행 중입니다.');
                     }
                 } else if (e.error === 'audio-capture') {
                     showError('마이크 오디오 캡처에 실패했습니다. 마이크 장치를 확인해 주십시오.');
                     stopRecordingAndAnalyze();
+                } else if (e.error !== 'aborted' && e.error !== 'no-speech') {
+                    console.log('Speech Recognition:', e.error);
                 }
             };
 
@@ -934,13 +935,9 @@ ${chunk}
                 isRecognizing = false;
                 
                 if (isRecording) {
-                    // Exponential backoff: start at 1s, multiply by 1.5, cap at 15s
-                    const backoffFactor = Math.min(15000, 1000 * Math.pow(1.5, networkErrorCount));
-                    const restartDelay = hadNetworkError ? backoffFactor : 300;
-                    
-                    if (hadNetworkError) {
-                        console.warn(`네트워크 오류 복구 시도 중 (재접속 대기 시간: ${Math.round(restartDelay)}ms)`);
-                    }
+                    // 네트워크 에러든 일반 세션 종료든, 빠르게 재시작 (500ms / 300ms)
+                    // 크롬 음성인식은 ~60초마다 세션이 자연 종료되므로 빠른 재연결이 핵심
+                    const restartDelay = hadNetworkError ? 500 : 300;
                     hadNetworkError = false; 
                     
                     setTimeout(() => {
@@ -948,9 +945,8 @@ ${chunk}
                             try { 
                                 recognition.start(); 
                             } catch (err) {
-                                // Ignore "already started" errors but log others
                                 if (!err.message?.includes('already started')) {
-                                    console.error('음성 인식 재시작 실패:', err);
+                                    console.log('음성 인식 재시작:', err.message);
                                 }
                             }
                         }
