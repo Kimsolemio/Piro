@@ -427,20 +427,11 @@
             aiTranscript = data.aiTranscript || data.transcript || ''; // AI교정본이 있으면 우선 로드, 없으면 원본으로 대체
             titleInput.value = data.title || '';
 
-            if (fullTranscript) {
-                transcriptDiv.innerHTML = '';
-                fullTranscript.split('\n')
-                    .filter(l => l.trim())
-                    .forEach(l => {
-                        const bubble = document.createElement('div');
-                        bubble.className = 'transcript-bubble text-slate-300 mb-2 whitespace-pre-wrap';
-                        bubble.textContent = l;
-                        transcriptDiv.appendChild(bubble);
-                    });
-                
-                // AI 교정 탭도 동일하게 주입
+            if (fullTranscript || aiTranscript) {
+                // AI 교정 속기록 패널에 로드
                 aiTranscriptContainer.innerHTML = '';
-                aiTranscript.split('\n')
+                const displayText = aiTranscript || fullTranscript;
+                displayText.split('\n')
                     .filter(l => l.trim())
                     .forEach(l => {
                         const bubble = document.createElement('div');
@@ -448,8 +439,6 @@
                         bubble.textContent = l;
                         aiTranscriptContainer.appendChild(bubble);
                     });
-                
-                tabRawTranscript.click(); // 기본적으로 실시간 원본 탭을 보임
                 document.getElementById('saveTranscriptTxtBtn').disabled = false;
             }
             if (finalSummaryRawMarkdown) {
@@ -931,9 +920,9 @@ ${chunk}
                 } else if (e.error === 'network') {
                     hadNetworkError = true;
                     networkErrorCount++;
-                    console.log(`음성 인식 네트워크 끊김 (${networkErrorCount}회) → 빠른 복구 시도`);
-                    if (networkErrorCount === 4) {
-                        showError('구글 음성인식 서버 연결이 지연되고 있습니다. 실시간 자막은 중단되었으나, 백그라운드 녹음은 정상 진행 중이므로 종료 시 최종 요약본이 생성됩니다.');
+                    console.warn(`음성 인식 네트워크 끊김 (${networkErrorCount}회) → 백오프 복구 시도`);
+                    if (networkErrorCount === 3) {
+                        showError('네트워크 연결이 불안정하여 실시간 자막 연결이 지연되고 있습니다. 연결이 복구되면 자동으로 재개됩니다. (백그라운드 녹음은 정상 진행 중)');
                     }
                 } else if (e.error === 'audio-capture') {
                     showError('마이크 오디오 캡처에 실패했습니다. 마이크 장치를 확인해 주십시오.');
@@ -945,12 +934,13 @@ ${chunk}
                 isRecognizing = false;
                 
                 if (isRecording) {
-                    if (networkErrorCount >= 4) {
-                        console.warn('네트워크 오류 누적으로 실시간 음성인식 재연결을 일시 중단합니다. 백그라운드 오디오 녹음은 유지됩니다.');
-                        return;
+                    // Exponential backoff: start at 1s, multiply by 1.5, cap at 15s
+                    const backoffFactor = Math.min(15000, 1000 * Math.pow(1.5, networkErrorCount));
+                    const restartDelay = hadNetworkError ? backoffFactor : 300;
+                    
+                    if (hadNetworkError) {
+                        console.warn(`네트워크 오류 복구 시도 중 (재접속 대기 시간: ${Math.round(restartDelay)}ms)`);
                     }
-                    // 네트워크 에러 시 600ms 대기로 크롬 과부하 방지, 일반 무음 끊김 시 300ms 빠른 복구
-                    const restartDelay = hadNetworkError ? 600 : 300;
                     hadNetworkError = false; 
                     
                     setTimeout(() => {
@@ -958,7 +948,10 @@ ${chunk}
                             try { 
                                 recognition.start(); 
                             } catch (err) {
-                                console.error('음성 인식 재시작 실패:', err);
+                                // Ignore "already started" errors but log others
+                                if (!err.message?.includes('already started')) {
+                                    console.error('음성 인식 재시작 실패:', err);
+                                }
                             }
                         }
                     }, restartDelay); 
@@ -1052,7 +1045,7 @@ ${chunk}
             recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
             document.getElementById('recordBtnText').textContent = '녹음 시작';
 
-            transcriptDiv.innerHTML = '<p class="text-slate-650 italic">상단 녹음 시작 버튼을 누르면 실시간 캡처 기록이 수집됩니다.</p>';
+            aiTranscriptContainer.innerHTML = '<p class="text-slate-650 italic">녹음이 시작되면 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>';
             interimSummaryDiv.innerHTML = '<p class="text-slate-650 italic">실시간 분석 대기 중...</p>';
             finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-650 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>';
             lucide.createIcons();
@@ -1244,8 +1237,7 @@ ${chunk}
                         aiTranscriptContainer.appendChild(p);
                         aiTranscriptContainer.scrollTop = aiTranscriptContainer.scrollHeight;
                         
-                        // AI 맞춤법 교정본 탭 활성화
-                        tabAiTranscript.click();
+                        // AI 교정 속기록 다운로드 버튼 활성화
                         document.getElementById('saveTranscriptTxtBtn').disabled = false;
 
                         // 최종 요약집 갱신
@@ -1387,21 +1379,11 @@ ${chunk}
                     fullTranscript = parsed.transcript;
                     aiTranscript = parsed.transcript;
                     
-                    const p1 = document.createElement('p');
-                    p1.id = 'liveParagraph';
-                    p1.className = 'mb-4 leading-relaxed whitespace-pre-wrap';
-                    p1.textContent = fullTranscript;
-                    transcriptDiv.innerHTML = '';
-                    transcriptDiv.appendChild(p1);
-
                     const p2 = document.createElement('p');
                     p2.className = 'mb-4 leading-relaxed whitespace-pre-wrap';
                     p2.textContent = aiTranscript;
                     aiTranscriptContainer.innerHTML = '';
                     aiTranscriptContainer.appendChild(p2);
-                    
-                    // Default to raw tab view
-                    tabRawTranscript.click();
 
                     // Update summaries
                     finalSummaryRawMarkdown = parsed.summary;
@@ -1697,7 +1679,7 @@ ${chunk}
 
             // Check protocol for Web Speech API compatibility warning
             if (window.location.protocol === 'file:') {
-                transcriptDiv.innerHTML = `
+                aiTranscriptContainer.innerHTML = `
                     <div class="bg-red-950/30 border border-red-800/40 rounded-xl p-3.5 text-xs text-red-300 leading-normal flex flex-col gap-2 shadow-inner">
                         <div class="font-bold flex items-center gap-1.5 text-red-400">
                             <i data-lucide="alert-triangle" class="h-4 w-4"></i> 브라우저 보안 정책 제한 안내
