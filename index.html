@@ -282,7 +282,7 @@ box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
 </div>
 <div class="relative flex-grow min-h-0 flex flex-col">
 <div id="aiTranscriptContainer" class="p-4 overflow-y-auto custom-scrollbar flex-grow text-xs leading-relaxed text-slate-300">
-<p class="text-slate-650 italic">녹음이 시작되면 300단어마다 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>
+<p class="text-slate-650 italic">녹음이 시작되면 의미 단위(문단)로 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>
 </div>
 </div>
 </div>
@@ -720,7 +720,7 @@ const startIdx = lastPolishedLength;
 const endIdx = fullTranscript.length;
 const chunk = fullTranscript.substring(startIdx, endIdx).trim();
 
-const minChars = isFinal ? 15 : 300;
+const minChars = isFinal ? 15 : 400; // 문단 단위 전송을 위해 최소 기준을 400자로 완화
 if (chunk.length < minChars) return;
 
 isPolishingChunk = true;
@@ -730,10 +730,11 @@ const model = document.getElementById('modelSelect').value || 'gemini-3.5-flash'
 const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
 
 const prompt = `당신은 실시간 속기 및 요약 전문가입니다. 제공된 한국어 음성 인식 텍스트(거친 텍스트)를 맞춤법 교정하고, 동시에 해당 청크의 핵심을 불렛마크로 요약해 주십시오.
-반드시 아래 JSON 포맷을 그대로 준수하여 단 한 단어의 다른 부연설명도 없이 JSON 결과만 출력하십시오:
+단순 교정뿐만 아니라, 화제나 맥락이 전환되는 지점에서는 자연스럽게 줄바꿈(\\n\\n)을 넣어 문단을 나누어 주십시오.
+반드시 아래 JSON 포맷을 그대로 준수하여 단 한 단어의 다른 부연설명도 없이 순수 JSON 결과만 출력하십시오:
 {
- "polishedText": "맞춤법, 띄어쓰기, 문장부호가 무손실로 완벽히 교정된 한국어 텍스트. 절대 요약하지 말고 원문의 모든 세부 정보를 온전히 보존하십시오.",
- "bulletSummary": "이 청크에 대한 요약 불렛마크들 (마크다운 포맷. 예: - **핵심 주제**\\n  - 세부 내용)"
+ "polishedText": "맞춤법 교정 및 적절히 문단이 나뉜 텍스트. 생략 없이 모든 내용 보존.",
+ "bulletSummary": "요약 불렛마크들 (마크다운)"
 }`;
 
 const payload = {
@@ -756,6 +757,10 @@ required: ["polishedText", "bulletSummary"]
 }
 };
 
+const delays = [1000, 2000, 4000, 8000];
+let successData = null;
+
+for (let i = 0; i <= delays.length; i++) {
 try {
 const response = await fetch(url, {
 method: 'POST',
@@ -764,22 +769,40 @@ body: JSON.stringify(payload)
 });
 
 if (response.ok) {
-const data = await response.json();
-const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+successData = await response.json();
+break; // 성공 시 루프 탈출
+} else {
+if (response.status === 429) {
+console.warn(`API Rate Limit (429) 감지. ${delays[i] || '재시도 포기'}ms 대기 후 재시도...`);
+} else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+break; // 400, 403, 404 등 클라이언트 오류는 재시도하지 않음
+}
+if (i === delays.length) break;
+await new Promise(r => setTimeout(r, delays[i]));
+}
+} catch (err) {
+console.error('API Fetch 에러:', err);
+if (i === delays.length) break;
+await new Promise(r => setTimeout(r, delays[i]));
+}
+}
+
+if (successData) {
+let rawJson = successData.candidates?.[0]?.content?.parts?.[0]?.text;
 if (rawJson) {
-const parsed = JSON.parse(rawJson.trim());
+// 마크다운 백틱 및 json 태그 제거하여 안전한 파싱 유도
+rawJson = rawJson.replace(/```(json)?|```/g, '').trim();
+const parsed = JSON.parse(rawJson);
 const polishedText = parsed.polishedText || '';
 const bulletSummary = parsed.bulletSummary || '';
 
 if (polishedText) {
-// Append to aiTranscript
 if (aiTranscript.length > 0) {
-aiTranscript += ' ' + polishedText;
+aiTranscript += '\n\n' + polishedText; // 새 문단은 엔터 두 번으로 확실히 분리
 } else {
 aiTranscript = polishedText;
 }
 
-// Update UI
 aiTranscriptContainer.innerHTML = '';
 const p = document.createElement('p');
 p.className = 'text-slate-300 leading-relaxed whitespace-pre-wrap';
@@ -790,7 +813,6 @@ document.getElementById('saveTranscriptTxtBtn').disabled = false;
 }
 
 if (bulletSummary) {
-// Update live summary
 summaryHistory.push(bulletSummary);
 const block = document.createElement('div');
 block.className = 'p-3 bg-slate-900/60 rounded-xl border border-slate-800/60 mb-3 prose prose-invert prose-xs max-w-none';
@@ -803,21 +825,21 @@ interimSummaryDiv.appendChild(block);
 interimSummaryDiv.scrollTop = interimSummaryDiv.scrollHeight;
 document.getElementById('saveInterimSummaryBtn').disabled = false;
 }
-
-// Advance the polished pointer
-lastPolishedLength = endIdx;
 }
 }
 } catch (err) {
-console.error('실시간 청크 교정 및 요약 실패:', err);
+console.error('실시간 청크 교정 및 요약 파싱 실패:', err);
 } finally {
+// 성공이든 실패든 포인터를 전진시켜 무한 반복 재시도 버그 차단
+lastPolishedLength = endIdx;
+
 isPolishingChunk = false;
 document.getElementById('interimSummaryLoader').classList.add('hidden');
 lucide.createIcons();
 
 // If more text has accumulated while calling the API, trigger again
 const remainingChunk = fullTranscript.substring(lastPolishedLength).trim();
-if (remainingChunk.length >= 300 && isRecording) {
+if (remainingChunk.length >= 400 && isRecording) {
 setTimeout(() => triggerChunkPolishing(false), 1000);
 }
 }
@@ -890,18 +912,22 @@ updateStatus('오디오 기록 중', 'recording');
 recognition.onresult = (event) => {
 networkErrorCount = 0; // Reset network error count on successful recognition
 let finalChunk = '';
+let hasFinal = false;
 for (let i = event.resultIndex; i < event.results.length; ++i) {
 if (event.results[i].isFinal) {
 finalChunk += event.results[i][0].transcript + ' ';
+hasFinal = true;
 }
 }
 
 if (finalChunk) {
 fullTranscript += finalChunk;
 
-// Trigger chunk-based real-time AI polishing every 300 characters
 const pendingChunk = fullTranscript.substring(lastPolishedLength).trim();
-if (pendingChunk.length >= 300 && !isPolishingChunk) {
+// 문단 분리 로직: 400글자 이상 쌓였고 사용자가 말을 잠깐 쉬었을 때(hasFinal) 전송
+// 혹은 랩하듯이 쉬지 않고 말해서 800글자를 넘기면 강제 전송
+if ((pendingChunk.length >= 400 && hasFinal && !isPolishingChunk) || 
+(pendingChunk.length >= 800 && !isPolishingChunk)) {
 triggerChunkPolishing(false);
 }
 }
@@ -1060,7 +1086,7 @@ recordBtn.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'border', 'bord
 recordBtn.classList.add('bg-red-600/90', 'hover:bg-red-600');
 document.getElementById('recordBtnText').textContent = '녹음 시작';
 
-aiTranscriptContainer.innerHTML = '<p class="text-slate-650 italic">녹음이 시작되면 300단어마다 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>';
+aiTranscriptContainer.innerHTML = '<p class="text-slate-650 italic">녹음이 시작되면 의미 단위(문단)로 AI 정밀 교정본이 이곳에 실시간 출력됩니다.</p>';
 interimSummaryDiv.innerHTML = '<p class="text-slate-650 italic">실시간 분석 대기 중...</p>';
 finalSummaryDiv.innerHTML = '<div class="text-center py-20 text-slate-650 text-xs">강의가 끝나거나 분석이 완료되면 최종 요약 정리 결과물이 출력됩니다.</div>';
 lucide.createIcons();
